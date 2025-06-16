@@ -1,3 +1,4 @@
+
 import type { LeakedKey } from './types';
 
 export const mockLeaks: LeakedKey[] = [
@@ -99,4 +100,99 @@ export const mockLeaks: LeakedKey[] = [
     accessibleResources: null,
     riskLevel: null,
   },
+  {
+    id: '6',
+    keyHash: 'hash_of_FCM_SERVER_KEY_EXAMPLE_123',
+    apiKeyPreview: 'AAAA...zYxw',
+    sourceUrl: 'https://github.com/some-dev/mobile-app-backend/blob/develop/notifications.py',
+    sourceType: 'github',
+    detectionTimestamp: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days ago
+    status: 'investigating',
+    contextSnippet: 'FCM_SERVER_KEY = "AAAAaBcDeFgHiJkLmNoPqRsTuVwXyZ12345_zYxw"',
+    keyType: 'Firebase Cloud Messaging Server Key',
+    entropy: 4.7,
+    repository: 'some-dev/mobile-app-backend',
+    filePath: 'notifications.py',
+    isLikelyLeak: null,
+    enhancedContext: null,
+    isValid: null,
+    accessibleResources: null,
+    riskLevel: null,
+  },
+  {
+    id: '7',
+    keyHash: 'hash_of_generic_oauth_token_abcdef123456',
+    apiKeyPreview: 'gho_...ef123',
+    sourceUrl: 'https://pastebin.com/zyxwvu',
+    sourceType: 'pastebin',
+    detectionTimestamp: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), // 3 hours ago
+    status: 'new',
+    contextSnippet: 'My temporary OAuth token: gho_abcdef123456ghijklmnopqrstuvwxyzABCD',
+    keyType: 'Generic OAuth Token',
+    entropy: 4.2,
+    isLikelyLeak: null,
+    enhancedContext: null,
+    isValid: null,
+    accessibleResources: null,
+    riskLevel: null,
+  },
+  {
+    id: '8',
+    keyHash: 'hash_of_darkweb_db_credential_user_pass',
+    apiKeyPreview: 'User:...@db',
+    sourceUrl: 'some_onion_link/forum/post/12345',
+    sourceType: 'dark_web_forum',
+    detectionTimestamp: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days ago
+    status: 'remediated',
+    contextSnippet: 'Database creds: user:admin pass:P@$$wOrd123 host:10.0.0.5 port:5432',
+    keyType: 'Database Credentials',
+    entropy: 3.9,
+    isLikelyLeak: true,
+    enhancedContext: "Plaintext database credentials found on a dark web forum.",
+    lastScanned: new Date(Date.now() - 29 * 24 * 60 * 60 * 1000).toISOString(),
+    isValid: false, // Assumed remediated means key is no longer valid
+    accessibleResources: "Potentially full database access before remediation.",
+    riskLevel: "high", // Was high before remediation
+    lastValidatedTimestamp: new Date(Date.now() - 28 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: '9',
+    keyHash: 'hash_of_another_aws_secret_xyz',
+    apiKeyPreview: 'wJalr...secret',
+    sourceUrl: 'https://gitlab.com/secops-playground/random-scripts/-/snippets/123',
+    sourceType: 'gitlab',
+    detectionTimestamp: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(), // 1 hour ago
+    status: 'new',
+    contextSnippet: 'export AWS_SECRET_ACCESS_KEY="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEYsecret"',
+    keyType: 'AWS Secret Access Key',
+    entropy: 4.9,
+    repository: 'secops-playground/random-scripts',
+    filePath: 'snippets/123',
+    isLikelyLeak: null,
+    enhancedContext: null,
+    isValid: null,
+    accessibleResources: null,
+    riskLevel: null,
+  },
+  {
+    id: '10',
+    keyHash: 'hash_of_sendgrid_api_key_sg',
+    apiKeyPreview: 'SG._...1234',
+    sourceUrl: 'https://github.com/marketing-tools/email-sender/blob/main/config.yml',
+    sourceType: 'github',
+    detectionTimestamp: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(), // 14 days ago
+    status: 'investigating',
+    contextSnippet: 'sendgrid_api_key: SG._xYzAaBcDeFgHiJkLmNoPqRsTuVwXyZ1234.zYxWvUtSrQpOnMlKjIhGfEdCbA',
+    keyType: 'SendGrid API Key',
+    entropy: 4.8,
+    repository: 'marketing-tools/email-sender',
+    filePath: 'config.yml',
+    isLikelyLeak: null,
+    enhancedContext: null,
+    isValid: null,
+    accessibleResources: null,
+    riskLevel: null,
+  }
 ];
+
+    

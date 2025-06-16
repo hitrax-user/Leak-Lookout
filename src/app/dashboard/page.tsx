@@ -140,8 +140,8 @@ export default function DashboardPage() {
     
     if (startPage > 1) {
         pageNumbers.push(
-            <PaginationItem key="startEllipsis">
-              <PaginationLink onClick={() => setCurrentPage(1)}>1</PaginationLink>
+            <PaginationItem key="page-1">
+              <PaginationLink onClick={() => setCurrentPage(1)} isActive={1 === currentPage}>1</PaginationLink>
             </PaginationItem>
         );
         if (startPage > 2) {
@@ -151,7 +151,7 @@ export default function DashboardPage() {
 
     for (let i = startPage; i <= endPage; i++) {
         pageNumbers.push(
-            <PaginationItem key={i}>
+            <PaginationItem key={`page-${i}`}>
                 <PaginationLink isActive={i === currentPage} onClick={() => setCurrentPage(i)}>
                     {i}
                 </PaginationLink>
@@ -164,8 +164,8 @@ export default function DashboardPage() {
             pageNumbers.push(<PaginationItem key="endEllipsisDot"><PaginationEllipsis /></PaginationItem>);
         }
         pageNumbers.push(
-             <PaginationItem key="endEllipsis">
-                <PaginationLink onClick={() => setCurrentPage(totalPages)}>{totalPages}</PaginationLink>
+             <PaginationItem key={`page-${totalPages}`}>
+                <PaginationLink onClick={() => setCurrentPage(totalPages)} isActive={totalPages === currentPage}>{totalPages}</PaginationLink>
             </PaginationItem>
         );
     }
@@ -175,11 +175,11 @@ export default function DashboardPage() {
       <Pagination className="mt-6">
         <PaginationContent>
           <PaginationItem>
-            <PaginationPrevious disabled={currentPage === 1} onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} />
+            <PaginationPrevious href="#" onClick={(e) => { e.preventDefault(); setCurrentPage(prev => Math.max(1, prev - 1))}} className={currentPage === 1 ? "pointer-events-none opacity-50" : undefined} />
           </PaginationItem>
           {pageNumbers}
           <PaginationItem>
-            <PaginationNext disabled={currentPage === totalPages} onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} />
+            <PaginationNext href="#" onClick={(e) => { e.preventDefault(); setCurrentPage(prev => Math.min(totalPages, prev + 1))}} className={currentPage === totalPages ? "pointer-events-none opacity-50" : undefined} />
           </PaginationItem>
         </PaginationContent>
       </Pagination>

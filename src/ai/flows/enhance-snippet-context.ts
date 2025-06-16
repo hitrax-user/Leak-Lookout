@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -42,22 +43,15 @@ const prompt = ai.definePrompt({
   name: 'enhanceSnippetContextPrompt',
   input: {schema: EnhanceSnippetContextInputSchema},
   output: {schema: EnhanceSnippetContextOutputSchema},
-  prompt: `You are a security analyst specializing in identifying API key leaks in code.
-
-You are provided with a code snippet and the type of API key that was detected in the snippet.
-
-Your task is to analyze the code snippet and provide a summary of the context surrounding the API key.
-Based on the context, determine if the detected API key is likely a real leak or a false positive.
-
-Code Snippet:
-```
-{{{codeSnippet}}}
-```
-
-API Key Type: {{{apiKeyType}}}
-
-Respond concisely.
-`,
+  prompt:
+    `You are a security analyst specializing in identifying API key leaks in code.\n\n` +
+    `You are provided with a code snippet and the type of API key that was detected in the snippet.\n\n` +
+    `Your task is to analyze the code snippet and provide a summary of the context surrounding the API key.\n` +
+    `Based on the context, determine if the detected API key is likely a real leak or a false positive.\n\n` +
+    `Code Snippet:\n` +
+    `\\\`\\\`\\\`\n{{{codeSnippet}}}\n\\\`\\\`\\\`\n\n` +
+    `API Key Type: {{{apiKeyType}}}\n\n` +
+    `Respond concisely.`,
 });
 
 const enhanceSnippetContextFlow = ai.defineFlow(
@@ -71,3 +65,4 @@ const enhanceSnippetContextFlow = ai.defineFlow(
     return output!;
   }
 );
+

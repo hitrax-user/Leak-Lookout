@@ -1,7 +1,9 @@
+
 "use server";
 
 import { enhanceSnippetContext, type EnhanceSnippetContextInput, type EnhanceSnippetContextOutput } from '@/ai/flows/enhance-snippet-context';
 import { generateRemediationSteps, type GenerateRemediationStepsInput, type GenerateRemediationStepsOutput } from '@/ai/flows/generate-remediation-steps';
+import { validateLeakedKey, type ValidateLeakedKeyInput, type ValidateLeakedKeyOutput } from '@/ai/flows/validate-leaked-key';
 
 export async function enhanceLeakContextAction(input: EnhanceSnippetContextInput): Promise<EnhanceSnippetContextOutput> {
   try {
@@ -20,5 +22,15 @@ export async function generateRemediationStepsAction(input: GenerateRemediationS
   } catch (error) {
     console.error("Error generating remediation steps:", error);
     throw new Error("Failed to generate remediation steps.");
+  }
+}
+
+export async function validateLeakedKeyAction(input: ValidateLeakedKeyInput): Promise<ValidateLeakedKeyOutput> {
+  try {
+    const result = await validateLeakedKey(input);
+    return result;
+  } catch (error) {
+    console.error("Error validating leaked key:", error);
+    throw new Error("Failed to validate leaked key.");
   }
 }

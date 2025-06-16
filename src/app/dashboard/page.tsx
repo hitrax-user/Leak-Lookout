@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -28,7 +29,7 @@ import {
 const ITEMS_PER_PAGE = 10;
 
 export default function DashboardPage() {
-  const { leaks, isLoading, error, updateLeakStatus, enhanceContext } = useLeaks();
+  const { leaks, isLoading, error, updateLeakStatus, enhanceContext, validateKey } = useLeaks();
   const [selectedLeak, setSelectedLeak] = useState<LeakedKey | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -91,26 +92,20 @@ export default function DashboardPage() {
 
   const handleUpdateStatus = (id: string, status: LeakStatus) => {
     updateLeakStatus(id, status);
-    if (selectedLeak && selectedLeak.id === id) {
-      setSelectedLeak(prev => prev ? { ...prev, status } : null);
-    }
+    // No toast here, handled in useLeaks if desired
   };
 
   const handleEnhanceContext = async (id: string) => {
     await enhanceContext(id);
-    // Refetch or update selectedLeak if it's the one being enhanced
-    if (selectedLeak && selectedLeak.id === id) {
-       // The useLeaks hook will update the main 'leaks' array.
-       // We need to find the updated leak and set it to selectedLeak.
-       // This might need a slight delay or a way to get the updated leak directly.
-       // For now, let's assume the modal will re-render with updated props.
-       // A better way would be for enhanceContext to return the updated leak.
-       const updatedLeak = leaks.find(l => l.id === id);
-       if(updatedLeak) setSelectedLeak(updatedLeak);
-    }
+    // selectedLeak will be updated by the useEffect below
+  };
+
+  const handleValidateKey = async (id: string) => {
+    await validateKey(id);
+     // selectedLeak will be updated by the useEffect below
   };
   
-  // Update selectedLeak when the main leaks array changes (e.g. after AI enhancement)
+  // Update selectedLeak when the main leaks array changes (e.g. after AI enhancement/validation)
   useEffect(() => {
     if (selectedLeak) {
       const updatedLeakFromList = leaks.find(l => l.id === selectedLeak.id);
@@ -125,7 +120,7 @@ export default function DashboardPage() {
     if (totalPages <= 1) return null;
 
     const pageNumbers = [];
-    const maxPagesToShow = 5; // Max number of page buttons to show (e.g., 1 ... 4 5 6 ... 10)
+    const maxPagesToShow = 5; 
     const halfPagesToShow = Math.floor(maxPagesToShow / 2);
 
     let startPage = Math.max(1, currentPage - halfPagesToShow);
@@ -245,7 +240,7 @@ export default function DashboardPage() {
         filters={filters}
         onFiltersChange={(changedFilters) => {
           setFilters(prev => ({ ...prev, ...changedFilters }));
-          setCurrentPage(1); // Reset to first page on filter change
+          setCurrentPage(1); 
         }}
         keyTypes={uniqueKeyTypes}
         sourceTypes={uniqueSourceTypes}
@@ -329,6 +324,7 @@ export default function DashboardPage() {
         onClose={handleCloseModal}
         onUpdateStatus={handleUpdateStatus}
         onEnhanceContext={handleEnhanceContext}
+        onValidateKey={handleValidateKey}
       />
     </div>
   );

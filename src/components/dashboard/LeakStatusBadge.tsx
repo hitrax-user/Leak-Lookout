@@ -12,13 +12,15 @@ export default function LeakStatusBadge({ status }: LeakStatusBadgeProps) {
     investigating: "bg-yellow-500 hover:bg-yellow-600 text-black",
     remediated: "bg-green-500 hover:bg-green-600 text-white",
     false_positive: "bg-gray-500 hover:bg-gray-600 text-white",
-    validating: "bg-purple-500 hover:bg-purple-600 text-white animate-pulse",
-    error_enhancing: "bg-red-500 hover:bg-red-600 text-white",
+    enhancing_context: "bg-purple-500 hover:bg-purple-600 text-white animate-pulse",
+    validating_key: "bg-indigo-500 hover:bg-indigo-600 text-white animate-pulse",
+    error_enhancing_context: "bg-red-600 hover:bg-red-700 text-white",
+    error_validating_key: "bg-pink-600 hover:bg-pink-700 text-white",
   };
 
   return (
     <Badge className={cn("capitalize", statusStyles[status])}>
-      {status.replace("_", " ")}
+      {status.replace(/_/g, " ")}
     </Badge>
   );
 }

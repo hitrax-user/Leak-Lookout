@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { AlertCircle, CheckCircle, Info, Loader2, RefreshCw, Wand2 } from 'lucide-react';
+import { AlertCircle, CheckCircle, Info, Loader2, RefreshCw, ShieldCheck, Wand2 } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import ApiKeyIcon from './ApiKeyIcon';
 import LeakStatusBadge from './LeakStatusBadge';
@@ -24,16 +24,17 @@ interface LeakDetailModalProps {
   onClose: () => void;
   onUpdateStatus: (id: string, status: LeakStatus) => void;
   onEnhanceContext: (id: string) => Promise<void>;
+  onValidateKey: (id: string) => Promise<void>;
 }
 
-export default function LeakDetailModal({ leak, isOpen, onClose, onUpdateStatus, onEnhanceContext }: LeakDetailModalProps) {
+export default function LeakDetailModal({ leak, isOpen, onClose, onUpdateStatus, onEnhanceContext, onValidateKey }: LeakDetailModalProps) {
   const [isGeneratingRemediation, setIsGeneratingRemediation] = useState(false);
   const [remediationSteps, setRemediationSteps] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
     if (leak) {
-      setRemediationSteps(null); // Reset remediation steps when a new leak is selected
+      setRemediationSteps(null); 
     }
   }, [leak]);
 
@@ -59,8 +60,10 @@ export default function LeakDetailModal({ leak, isOpen, onClose, onUpdateStatus,
     }
   };
   
-  const isAiAnalyzed = leak.enhancedContext !== null;
-  const isAnalyzing = leak.status === 'validating';
+  const isEnhancingContext = leak.status === 'enhancing_context';
+  const isValidatingKey = leak.status === 'validating_key';
+  const hasEnhancedContext = leak.enhancedContext !== null;
+  const hasValidatedKey = leak.isValid !== null;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -114,52 +117,99 @@ export default function LeakDetailModal({ leak, isOpen, onClose, onUpdateStatus,
                     <Wand2 className="text-primary h-5 w-5" /> AI Analysis
                   </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  {isAnalyzing && (
-                    <div className="space-y-2">
-                      <Skeleton className="h-4 w-3/4" />
-                      <Skeleton className="h-4 w-1/2" />
-                      <Skeleton className="h-4 w-full" />
-                       <div className="flex items-center text-sm text-muted-foreground pt-2">
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        AI is analyzing the context...
+                <CardContent className="space-y-4">
+                  {/* Context Enhancement Section */}
+                  <div>
+                    <h4 className="text-sm font-medium text-muted-foreground mb-1">Context Enhancement</h4>
+                    {isEnhancingContext && (
+                      <div className="space-y-1">
+                        <Skeleton className="h-4 w-3/4" />
+                        <Skeleton className="h-4 w-1/2" />
+                        <div className="flex items-center text-xs text-muted-foreground pt-1">
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          AI is analyzing context...
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  {!isAnalyzing && leak.isLikelyLeak !== null && (
-                    <>
-                       <InfoItem label="Likely a Leak?">
-                        <Badge variant={leak.isLikelyLeak ? "destructive" : "default"} className="text-sm">
-                          {leak.isLikelyLeak ? <AlertCircle className="mr-1 h-4 w-4" /> : <CheckCircle className="mr-1 h-4 w-4" />}
-                          {leak.isLikelyLeak ? 'Yes' : 'No'}
-                        </Badge>
-                      </InfoItem>
-                       <p className="text-sm text-muted-foreground">{leak.enhancedContext}</p>
-                       {leak.lastScanned && <p className="text-xs text-muted-foreground/70 pt-1">Last analyzed: {format(parseISO(leak.lastScanned), "Pp")}</p>}
-                    </>
-                  )}
-                  {!isAnalyzing && leak.enhancedContext === null && leak.status !== 'error_enhancing' && (
-                    <div className="text-sm text-muted-foreground">
-                      <Info className="inline mr-1 h-4 w-4" />
-                      AI analysis not yet performed.
-                    </div>
-                  )}
-                  {leak.status === 'error_enhancing' && (
-                     <div className="text-sm text-destructive flex items-center">
-                        <AlertCircle className="inline mr-1 h-4 w-4" />
-                        AI analysis encountered an error.
-                    </div>
-                  )}
-                  <Button 
-                    onClick={() => onEnhanceContext(leak.id)} 
-                    disabled={isAnalyzing || leak.status === 'error_enhancing'} 
-                    size="sm" 
-                    variant="outline"
-                    className="w-full mt-2"
-                  >
-                    {isAnalyzing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                    {isAiAnalyzed ? 'Re-analyze' : 'Run AI Analysis'}
-                  </Button>
+                    )}
+                    {!isEnhancingContext && leak.isLikelyLeak !== null && (
+                      <>
+                        <InfoItem label="Likely a Leak?" size="xs">
+                          <Badge variant={leak.isLikelyLeak ? "destructive" : "default"} className="text-xs">
+                            {leak.isLikelyLeak ? <AlertCircle className="mr-1 h-3 w-3" /> : <CheckCircle className="mr-1 h-3 w-3" />}
+                            {leak.isLikelyLeak ? 'Yes' : 'No'}
+                          </Badge>
+                        </InfoItem>
+                        <p className="text-xs text-muted-foreground">{leak.enhancedContext}</p>
+                        {leak.lastScanned && <p className="text-xs text-muted-foreground/70 pt-1">Analyzed: {format(parseISO(leak.lastScanned), "Pp")}</p>}
+                      </>
+                    )}
+                    {!isEnhancingContext && leak.enhancedContext === null && leak.status !== 'error_enhancing_context' && (
+                      <p className="text-xs text-muted-foreground"><Info className="inline mr-1 h-3 w-3" />Not yet analyzed.</p>
+                    )}
+                    {leak.status === 'error_enhancing_context' && (
+                       <p className="text-xs text-destructive flex items-center"><AlertCircle className="inline mr-1 h-3 w-3" />Analysis error.</p>
+                    )}
+                    <Button 
+                      onClick={() => onEnhanceContext(leak.id)} 
+                      disabled={isEnhancingContext || isValidatingKey} 
+                      size="sm" 
+                      variant="outline"
+                      className="w-full mt-2 text-xs"
+                    >
+                      {isEnhancingContext ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-2 h-3 w-3" />}
+                      {hasEnhancedContext ? 'Re-analyze Context' : 'Analyze Context'}
+                    </Button>
+                  </div>
+                  
+                  <Separator />
+
+                  {/* Key Validation Section */}
+                  <div>
+                    <h4 className="text-sm font-medium text-muted-foreground mb-1">Key Validation</h4>
+                    {isValidatingKey && (
+                      <div className="space-y-1">
+                        <Skeleton className="h-4 w-3/4" />
+                        <Skeleton className="h-4 w-1/2" />
+                        <div className="flex items-center text-xs text-muted-foreground pt-1">
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          AI is validating key...
+                        </div>
+                      </div>
+                    )}
+                    {!isValidatingKey && leak.isValid !== null && (
+                      <div className="space-y-1 text-xs">
+                        <InfoItem label="Is Valid Key?" size="xs">
+                          <Badge variant={leak.isValid ? "destructive" : "default"} className="text-xs">
+                            {leak.isValid ? <AlertCircle className="mr-1 h-3 w-3" /> : <CheckCircle className="mr-1 h-3 w-3" />}
+                            {leak.isValid ? 'Valid' : 'Invalid / Inactive'}
+                          </Badge>
+                        </InfoItem>
+                        <InfoItem label="Accessible Resources" value={leak.accessibleResources || "N/A"} size="xs" />
+                        <InfoItem label="Risk Level" size="xs">
+                            <Badge variant={leak.riskLevel === "high" ? "destructive" : leak.riskLevel === "medium" ? "secondary" : "default"} className="capitalize text-xs">
+                                {leak.riskLevel || "N/A"}
+                            </Badge>
+                        </InfoItem>
+                        {leak.lastValidatedTimestamp && <p className="text-xs text-muted-foreground/70 pt-1">Validated: {format(parseISO(leak.lastValidatedTimestamp), "Pp")}</p>}
+                      </div>
+                    )}
+                     {!isValidatingKey && leak.isValid === null && leak.status !== 'error_validating_key' && (
+                       <p className="text-xs text-muted-foreground"><Info className="inline mr-1 h-3 w-3" />Not yet validated.</p>
+                    )}
+                    {leak.status === 'error_validating_key' && (
+                       <p className="text-xs text-destructive flex items-center"><AlertCircle className="inline mr-1 h-3 w-3" />Validation error.</p>
+                    )}
+                     <Button 
+                      onClick={() => onValidateKey(leak.id)} 
+                      disabled={isValidatingKey || isEnhancingContext}
+                      size="sm" 
+                      variant="outline"
+                      className="w-full mt-2 text-xs"
+                    >
+                      {isValidatingKey ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <ShieldCheck className="mr-2 h-3 w-3" />}
+                      {hasValidatedKey ? 'Re-validate Key' : 'Validate Key'}
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
               
@@ -168,10 +218,10 @@ export default function LeakDetailModal({ leak, isOpen, onClose, onUpdateStatus,
                   <CardTitle className="text-lg font-headline">Actions</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-2">
-                  {(['new', 'investigating', 'error_enhancing'] as LeakStatus[]).includes(leak.status) && (
+                  {(['new', 'investigating', 'error_enhancing_context', 'error_validating_key'] as LeakStatus[]).includes(leak.status) && (
                     <Button onClick={() => onUpdateStatus(leak.id, 'investigating')} variant="outline" className="w-full">Mark as Investigating</Button>
                   )}
-                  {(['new', 'investigating'] as LeakStatus[]).includes(leak.status) && (
+                  {(['new', 'investigating', 'enhancing_context', 'validating_key'] as LeakStatus[]).includes(leak.status) && (
                      <Button onClick={() => onUpdateStatus(leak.id, 'false_positive')} variant="outline" className="w-full">Mark as False Positive</Button>
                   )}
                   {leak.status !== 'remediated' && (
@@ -224,12 +274,11 @@ export default function LeakDetailModal({ leak, isOpen, onClose, onUpdateStatus,
   );
 }
 
-const InfoItem = ({ label, value, children, isMonospace = false }: { label: string; value?: string | number; children?: React.ReactNode, isMonospace?: boolean }) => (
-  <div className="flex flex-col sm:flex-row sm:justify-between text-sm">
+const InfoItem = ({ label, value, children, isMonospace = false, size = "sm" }: { label: string; value?: string | number; children?: React.ReactNode, isMonospace?: boolean, size?: "xs" | "sm" }) => (
+  <div className={cn("flex flex-col sm:flex-row sm:justify-between", size === "sm" ? "text-sm" : "text-xs")}>
     <dt className="font-medium text-muted-foreground">{label}:</dt>
     <dd className={cn("mt-1 sm:mt-0 text-foreground", isMonospace && "font-code")}>
       {children || value}
     </dd>
   </div>
 );
-

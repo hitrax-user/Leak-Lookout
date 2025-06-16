@@ -16,6 +16,9 @@ export const mockLeaks: LeakedKey[] = [
     filePath: 'src/config.js',
     isLikelyLeak: null,
     enhancedContext: null,
+    isValid: null,
+    accessibleResources: null,
+    riskLevel: null,
   },
   {
     id: '2',
@@ -31,6 +34,10 @@ export const mockLeaks: LeakedKey[] = [
     isLikelyLeak: true,
     enhancedContext: "The snippet clearly shows an AWS Access Key ID paired with what appears to be a secret access key. This is highly indicative of a real leak.",
     lastScanned: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    isValid: true,
+    accessibleResources: "S3 Buckets (limited access), EC2 instance (metadata only)",
+    riskLevel: "medium",
+    lastValidatedTimestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
   },
   {
     id: '3',
@@ -48,6 +55,10 @@ export const mockLeaks: LeakedKey[] = [
     isLikelyLeak: false,
     enhancedContext: "The key is present as a fallback in an environment variable retrieval, potentially for local development. While present, the primary source is an environment variable, suggesting it might be a placeholder or dev key.",
     lastScanned: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+    isValid: false,
+    accessibleResources: "None",
+    riskLevel: "low",
+    lastValidatedTimestamp: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
   },
   {
     id: '4',
@@ -65,6 +76,9 @@ export const mockLeaks: LeakedKey[] = [
     isLikelyLeak: false,
     enhancedContext: "The context explicitly states 'Example API Key' and 'for_documentation_only', strongly indicating this is a false positive.",
     lastScanned: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(),
+    isValid: null, // Not applicable for false positive typically
+    accessibleResources: null,
+    riskLevel: null,
   },
    {
     id: '5',
@@ -81,5 +95,8 @@ export const mockLeaks: LeakedKey[] = [
     filePath: 'app.js',
     isLikelyLeak: null,
     enhancedContext: null,
+    isValid: null,
+    accessibleResources: null,
+    riskLevel: null,
   },
 ];

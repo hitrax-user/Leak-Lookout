@@ -1,10 +1,11 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
 import type { LeakedKey, LeakStatus } from '@/lib/types';
 import { mockLeaks } from '@/lib/mockData';
 import { useToast } from '@/hooks/use-toast';
-import { enhanceLeakContextAction } from '@/app/actions';
+import { enhanceLeakContextAction, validateLeakedKeyAction } from '@/app/actions';
 
 export function useLeaks() {
   const [leaks, setLeaks] = useState<LeakedKey[]>([]);
@@ -13,7 +14,6 @@ export function useLeaks() {
   const { toast } = useToast();
 
   useEffect(() => {
-    // Simulate API call
     const timer = setTimeout(() => {
       setLeaks(mockLeaks.sort((a,b) => new Date(b.detectionTimestamp).getTime() - new Date(a.detectionTimestamp).getTime()));
       setIsLoading(false);
@@ -27,11 +27,12 @@ export function useLeaks() {
         leak.id === id ? { ...leak, status } : leak
       )
     );
-    toast({
-      title: "Status Updated",
-      description: `Leak ${id} status changed to ${status}.`,
-    });
-  }, [toast]);
+    // Toast is often too noisy for simple status updates, enable if desired.
+    // toast({
+    //   title: "Status Updated",
+    //   description: `Leak ${id} status changed to ${status.replace("_", " ")}.`,
+    // });
+  }, []);
 
   const enhanceContext = useCallback(async (leakId: string) => {
     const leakToEnhance = leaks.find(l => l.id === leakId);
@@ -40,7 +41,8 @@ export function useLeaks() {
       return;
     }
 
-    setLeaks(prev => prev.map(l => l.id === leakId ? { ...l, status: 'validating' } : l));
+    const originalStatus = leakToEnhance.status;
+    updateLeakStatus(leakId, 'enhancing_context');
 
     try {
       const result = await enhanceLeakContextAction({
@@ -55,26 +57,74 @@ export function useLeaks() {
                 ...leak, 
                 enhancedContext: result.enhancedContext, 
                 isLikelyLeak: result.isLikelyLeak,
-                status: leakToEnhance.status === 'validating' ? 'new' : leakToEnhance.status, // revert to original if it was new, or keep current
+                status: (originalStatus === 'enhancing_context' || originalStatus === 'error_enhancing_context') ? 'new' : originalStatus,
                 lastScanned: new Date().toISOString(),
               } 
             : leak
         )
       );
       toast({
-        title: "AI Analysis Complete",
+        title: "AI Context Analysis Complete",
         description: `Context enhanced for leak ${leakId}.`,
       });
     } catch (err) {
       console.error("Failed to enhance context:", err);
-      setLeaks(prev => prev.map(l => l.id === leakId ? { ...l, status: 'error_enhancing', enhancedContext: "Error during AI analysis.", isLikelyLeak: null } : l));
+      updateLeakStatus(leakId, 'error_enhancing_context');
+      setLeaks(prev => prev.map(l => l.id === leakId ? { ...l, enhancedContext: "Error during AI context analysis.", isLikelyLeak: null } : l));
       toast({
         variant: "destructive",
-        title: "AI Analysis Failed",
+        title: "AI Context Analysis Failed",
         description: `Could not enhance context for leak ${leakId}.`,
       });
     }
-  }, [leaks, toast]);
+  }, [leaks, toast, updateLeakStatus]);
 
-  return { leaks, isLoading, error, updateLeakStatus, enhanceContext, setLeaks };
+  const validateKey = useCallback(async (leakId: string) => {
+    const leakToValidate = leaks.find(l => l.id === leakId);
+    if (!leakToValidate) {
+      toast({ variant: "destructive", title: "Error", description: "Leak not found." });
+      return;
+    }
+
+    const originalStatus = leakToValidate.status;
+    updateLeakStatus(leakId, 'validating_key');
+
+    try {
+      const result = await validateLeakedKeyAction({
+        key: leakToValidate.apiKeyPreview, // Assuming apiKeyPreview is enough, or use a placeholder for the full key if available
+        keyType: leakToValidate.keyType,
+        sourceUrl: leakToValidate.sourceUrl,
+      });
+      
+      setLeaks(prevLeaks => 
+        prevLeaks.map(leak => 
+          leak.id === leakId 
+            ? { 
+                ...leak, 
+                isValid: result.isValid,
+                accessibleResources: result.accessibleResources,
+                riskLevel: result.riskLevel,
+                status: (originalStatus === 'validating_key' || originalStatus === 'error_validating_key') ? 'new' : originalStatus,
+                lastValidatedTimestamp: new Date().toISOString(),
+              } 
+            : leak
+        )
+      );
+      toast({
+        title: "AI Key Validation Complete",
+        description: `Key validation performed for leak ${leakId}.`,
+      });
+    } catch (err) {
+      console.error("Failed to validate key:", err);
+      updateLeakStatus(leakId, 'error_validating_key');
+      setLeaks(prev => prev.map(l => l.id === leakId ? { ...l, isValid: null, accessibleResources: "Error during AI key validation.", riskLevel: null } : l));
+      toast({
+        variant: "destructive",
+        title: "AI Key Validation Failed",
+        description: `Could not validate key for leak ${leakId}.`,
+      });
+    }
+  }, [leaks, toast, updateLeakStatus]);
+
+  return { leaks, isLoading, error, updateLeakStatus, enhanceContext, validateKey, setLeaks };
 }

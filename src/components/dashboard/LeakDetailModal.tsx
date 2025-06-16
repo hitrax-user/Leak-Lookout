@@ -1,7 +1,8 @@
+
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { LeakedKey, LeakStatus } from '@/lib/types';
+import type { LeakedKey, LeakStatus } from '@/lib/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +16,7 @@ import { generateRemediationStepsAction } from '@/app/actions';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from "@/lib/utils";
 
 interface LeakDetailModalProps {
   leak: LeakedKey | null;
@@ -230,3 +232,4 @@ const InfoItem = ({ label, value, children, isMonospace = false }: { label: stri
     </dd>
   </div>
 );
+

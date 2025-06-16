@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/pagination";
 
 
-const ITEMS_PER_PAGE = 10;
+const ITEMS_PER_PAGE = 20;
 
 export default function DashboardPage() {
   const { leaks, isLoading, error, updateLeakStatus, enhanceContext, validateKey } = useLeaks();
@@ -329,3 +329,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

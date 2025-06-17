@@ -27,7 +27,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    // { href: '/settings', label: 'Settings', icon: Settings }, // Example for future use
+    { href: '/settings', label: 'Settings', icon: Settings },
   ];
   
   return (

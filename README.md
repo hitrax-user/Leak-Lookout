@@ -69,19 +69,20 @@ The backend service uses a Firebase Cloud Function (`scheduledLeakScanner`) to s
 1.  **Configure Firebase Secret Manager:**
     *   In your Google Cloud project (associated with Firebase), go to Secret Manager.
     *   Create two secrets:
-        *   Name: `GITHUB_API_KEY` (or the custom name set in `.env` / `functions/.env`)
+        *   Name: `GITHUB_API_KEY` (or the custom name set in `.env` / `functions/.env` by `GITHUB_API_KEY_SECRET_NAME`)
         *   Value: Your GitHub PAT
-        *   Name: `GITLAB_API_KEY` (or the custom name set in `.env` / `functions/.env`)
+        *   Name: `GITLAB_API_KEY` (or the custom name set in `.env` / `functions/.env` by `GITLAB_API_KEY_SECRET_NAME`)
         *   Value: Your GitLab PAT
     *   Ensure the service account used by your Cloud Functions (usually `your-project-id@appspot.gserviceaccount.com`) has the **"Secret Manager Secret Accessor"** IAM role.
 
 2.  **Set Environment Variables for Functions (Optional but Recommended):**
-    While the function can derive the secret names from `process.env` (which can be set during deployment or via `.env` files in the `functions` directory if using `dotenv`), it's good practice. If you used custom secret names in `NEXT_PUBLIC_...` variables, ensure the function code uses the same names or set them for the function environment:
+    While the function can derive the secret names from `process.env` (which can be set during deployment or via `.env` files in the `functions` directory if using `dotenv`), it's good practice.
+    You can control the names of the secrets fetched from Secret Manager by setting `GITHUB_API_KEY_SECRET_NAME` and `GITLAB_API_KEY_SECRET_NAME` environment variables for your Cloud Function (e.g., during deployment or in `functions/.env`). If not set, they default to "GITHUB_API_KEY" and "GITLAB_API_KEY".
     ```bash
     # Example: In functions/.env (if using dotenv locally) or during deployment
     # GCLOUD_PROJECT=your-firebase-project-id
-    # GITHUB_API_KEY_SECRET_NAME=GITHUB_API_KEY
-    # GITLAB_API_KEY_SECRET_NAME=GITLAB_API_KEY
+    # GITHUB_API_KEY_SECRET_NAME=CUSTOM_GITHUB_SECRET
+    # GITLAB_API_KEY_SECRET_NAME=CUSTOM_GITLAB_SECRET
     ```
     The `GCLOUD_PROJECT` is usually automatically available in the Cloud Functions environment.
 
@@ -124,13 +125,23 @@ The backend service uses a Firebase Cloud Function (`scheduledLeakScanner`) to s
 
 3.  **Verify Dashboard Data:**
     *   Open the Leak Lookout application in your browser.
-    *   The dashboard should now populate with leaks from the Firestore `leaks` collection, not just mock data. New leaks found by the scanner should appear here.
+    *   The dashboard should now populate with leaks from the Firestore `leaks` collection. New leaks found by the scanner should appear here.
     *   Test filtering and viewing details to ensure data integrity.
 
 4.  **Test with Emulators (Development):**
     *   Run `firebase emulators:start`.
-    *   Your Next.js app's Firebase client and the Cloud Functions (if configured) can be pointed to the emulators.
+    *   Your Next.js app's Firebase client and the Cloud Functions (if configured to connect to emulators) can be pointed to the emulators.
     *   Trigger the function manually (e.g., via HTTP trigger if configured for emulation, or by calling its exported method in the emulator shell).
-    *   Check the Functions and Firestore Emulator UIs (usually `http://localhost:4000`) for logs and data.
+    *   Check the Functions and Firestore Emulator UIs (usually `http://localhost:4000` for the main emulator UI) for logs and data.
 
-By following these steps, you can confirm that the backend scanning service is correctly set up, running as scheduled, and populating the database with potential leaks for the frontend to display.
+## Developer Handover Notes
+
+For a new developer joining the project, we recommend starting with the following sections in this README:
+1.  **Core Features**: To understand the project's goals.
+2.  **Project Structure**: To get an overview of the codebase organization.
+3.  **Getting Started (Frontend)**: For setting up the development environment.
+4.  **Backend Scanning Service Setup**: For understanding and setting up the backend components.
+5.  **Confirming the Backend Service is Working**: To verify the setup.
+
+Key technologies include Next.js, React, ShadCN UI, and TailwindCSS for the frontend. The backend consists of Firebase Cloud Functions (for scheduled scanning), Firestore (database), Firebase Secret Manager (for API keys), and Genkit (for AI-powered analysis flows using Google's Gemini models).
+```

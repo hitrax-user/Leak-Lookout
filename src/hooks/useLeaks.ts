@@ -133,7 +133,7 @@ export function useLeaks() {
         description: `Could not enhance context for leak ${leakId}.`,
       });
     }
-  }, [leaks, toast]); // Removed updateLeakStatus as it's now part of updateLeakStatusInFirestore
+  }, [leaks, toast]); 
 
   const validateKey = useCallback(async (leakId: string) => {
     const leakToValidate = leaks.find(l => l.id === leakId);
@@ -147,7 +147,10 @@ export function useLeaks() {
 
     try {
       const result = await validateLeakedKeyAction({
-        key: leakToValidate.apiKeyPreview,
+        // This should ideally be the actual key, but apiKeyPreview is used for safety in this prototype.
+        // In a real system, you'd need a secure way to handle the actual key for validation if absolutely necessary
+        // or rely on metadata/provider checks if possible without exposing the key.
+        key: leakToValidate.apiKeyPreview, // CAUTION: This is a preview. Real validation might need the full key.
         keyType: leakToValidate.keyType,
         sourceUrl: leakToValidate.sourceUrl,
       });
@@ -181,7 +184,7 @@ export function useLeaks() {
         description: `Could not validate key for leak ${leakId}.`,
       });
     }
-  }, [leaks, toast]); // Removed updateLeakStatus
+  }, [leaks, toast]); 
 
   // Expose setLeaks for potential direct manipulation if ever needed (e.g. after a bulk operation not via snapshot)
   return { leaks, isLoading, error, updateLeakStatus, enhanceContext, validateKey, setLeaks };

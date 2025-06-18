@@ -150,4 +150,3 @@ export interface LeakedKeyDocument {
 export type PartialLeakedKey = Omit<LeakedKeyDocument, 'id' | 'detectionTimestamp' | 'status' | 
                                  'isLikelyLeak' | 'enhancedContext' | 'isValid' | 
                                  'accessibleResources' | 'riskLevel' | 'lastScanned' | 'lastValidatedTimestamp'>;
-

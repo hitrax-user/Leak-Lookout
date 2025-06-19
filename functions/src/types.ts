@@ -150,3 +150,11 @@ export interface LeakedKeyDocument {
 export type PartialLeakedKey = Omit<LeakedKeyDocument, 'id' | 'detectionTimestamp' | 'status' | 
                                  'isLikelyLeak' | 'enhancedContext' | 'isValid' | 
                                  'accessibleResources' | 'riskLevel' | 'lastScanned' | 'lastValidatedTimestamp'>;
+
+
+// Scan Configuration/Status Type for Firestore
+export interface ScanConfig {
+  isPaused: boolean;
+  lastRunStart: admin.firestore.Timestamp | null;
+  lastRunFinish: admin.firestore.Timestamp | null;
+}

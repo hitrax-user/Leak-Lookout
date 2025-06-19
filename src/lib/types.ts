@@ -61,3 +61,11 @@ export interface LeakedKeyFromFirestore {
   riskLevel?: string | null;
   lastValidatedTimestamp?: any | null; // Firestore Timestamp or ISO string
 }
+
+// Type for scan status displayed on settings page
+export interface ScanStatus {
+  isPaused: boolean;
+  lastRunStart: string | null;
+  lastRunFinish: string | null;
+  error?: string; // Optional error message for fetching status
+}

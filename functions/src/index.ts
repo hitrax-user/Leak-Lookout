@@ -36,7 +36,7 @@ export const triggerManualScan = functions
     // if (!context.auth) {
     //   throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
     // }
-    const eventId = context.eventId || `manual-${Date.now()}`;
+    const eventId = `manual-${Date.now()}`;
     logger.info('Manual scan triggered.', { eventId, byUser: context.auth?.uid });
     try {
       await executeScanLogic(eventId);

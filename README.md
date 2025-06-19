@@ -40,6 +40,7 @@ Leak Lookout is an intelligent tool designed to help identify and manage potenti
     *   `package.json`: Dependencies for Cloud Functions.
     *   `tsconfig.json`: TypeScript configuration for Cloud Functions.
 *   `public/`: Static assets.
+*   `.env.local.example`: Example file for frontend Firebase configuration keys.
 
 ## Getting Started (Frontend)
 
@@ -50,7 +51,11 @@ Leak Lookout is an intelligent tool designed to help identify and manage potenti
     yarn install
     ```
 2.  **Set Up Firebase Client Environment Variables:**
-    Create a `.env.local` file in the root of the project and add your Firebase project configuration:
+    *   Copy the `.env.local.example` file to a new file named `.env.local` in the root of the project:
+        ```bash
+        cp .env.local.example .env.local
+        ```
+    *   Open `.env.local` and add your Firebase project configuration values. These keys are for the **frontend Next.js application** to connect to your Firebase project.
     ```env
     NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key
     NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_firebase_auth_domain
@@ -59,12 +64,9 @@ Leak Lookout is an intelligent tool designed to help identify and manage potenti
     NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_firebase_messaging_sender_id
     NEXT_PUBLIC_FIREBASE_APP_ID=your_firebase_app_id
     NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=your_firebase_measurement_id
-
-    # Optional: Specify custom names for secrets if not using defaults
-    # These are primarily for the backend Cloud Function environment.
-    # GITHUB_API_KEY_SECRET_NAME=YOUR_CUSTOM_GITHUB_SECRET_NAME_IN_SECRET_MANAGER
-    # GITLAB_API_KEY_SECRET_NAME=YOUR_CUSTOM_GITLAB_SECRET_NAME_IN_SECRET_MANAGER
     ```
+    *   **DO NOT commit `.env.local` to your Git repository.** This file is for local development and contains sensitive information.
+
 3.  **Run the Development Server:**
     ```bash
     npx next dev --turbopack -p 9002
@@ -83,27 +85,27 @@ The backend service uses a Firebase Cloud Function (`scheduledLeakScanner`) to s
 
 **Setup Steps:**
 
-1.  **Configure Firebase Secret Manager:**
-    *   In your Google Cloud project (associated with Firebase), go to Secret Manager.
+1.  **Configure Firebase Secret Manager for GitHub & GitLab API Keys:**
+    *   The **backend scanning service (Cloud Function)** requires API keys for GitHub and GitLab. These keys **MUST be stored securely in Firebase Secret Manager** (which is Google Cloud Secret Manager within your Firebase project).
+    *   In your Google Cloud project (associated with Firebase), navigate to **Secret Manager**.
     *   Create two secrets:
-        *   Name: `GITHUB_API_KEY` (or the custom name set in your function's environment by `GITHUB_API_KEY_SECRET_NAME` if you choose to customize it).
-        *   Value: Your GitHub PAT.
-        *   Name: `GITLAB_API_KEY` (or the custom name set by `GITLAB_API_KEY_SECRET_NAME`).
-        *   Value: Your GitLab PAT.
-    *   Ensure the service account used by your Cloud Functions (usually `your-project-id@appspot.gserviceaccount.com`) has the **"Secret Manager Secret Accessor"** IAM role.
+        *   **Secret 1 (GitHub):**
+            *   Name: `GITHUB_API_KEY` (This is the default name the function looks for. You can use a custom name if you also set the `GITHUB_API_KEY_SECRET_NAME` environment variable for your Cloud Function, but using the default is simpler).
+            *   Value: Your GitHub Personal Access Token (PAT).
+        *   **Secret 2 (GitLab):**
+            *   Name: `GITLAB_API_KEY` (Default name. Customizable via `GITLAB_API_KEY_SECRET_NAME` environment variable for the function).
+            *   Value: Your GitLab Personal Access Token.
+    *   **Grant Access:** Ensure the service account used by your Cloud Functions (usually `your-project-id@appspot.gserviceaccount.com`) has the **"Secret Manager Secret Accessor"** IAM role. This allows the function to read the secret values.
+    *   **Important:** The API key input fields on the "Settings" page of the web application are for demonstration and informational purposes only. **They do not configure the keys used by the backend scanner.** The backend scanner *only* uses keys from Secret Manager.
 
-2.  **Set Environment Variables for Functions (Optional but Recommended for Custom Secret Names):**
-    The Cloud Functions will try to access secrets named `GITHUB_API_KEY` and `GITLAB_API_KEY` by default. If you named your secrets differently in Secret Manager, you need to tell the functions what those names are.
-    The `GCLOUD_PROJECT` is usually automatically available in the Cloud Functions environment. The clients `githubClient.ts` and `gitlabClient.ts` will use `process.env.GITHUB_API_KEY_SECRET_NAME` or `GITHUB_API_KEY` as the secret ID.
-
-3.  **Deploy Cloud Functions:**
+2.  **Deploy Cloud Functions:**
     *   Navigate to the `functions` directory: `cd functions`
     *   Install dependencies: `npm install` (or `yarn install`)
     *   Build the TypeScript code: `npm run build`
     *   Deploy functions (from the root project directory or `functions` directory): `firebase deploy --only functions`
     *   This command deploys the functions to your **currently selected Firebase project**.
 
-4.  **Configure Firestore Security Rules:**
+3.  **Configure Firestore Security Rules:**
     Protect your `leaks` collection and the `scan_config/status` document.
     *Example (for initial development, **refine for production**):*
     ```json
@@ -134,15 +136,18 @@ There are several ways to deploy the Next.js frontend application:
     *   If you are working within Firebase Studio, the "Publish" button (often located above the chat/AI assistant interface) may provide a highly managed deployment experience.
     *   **Important Observation:** Based on user experience, this "Publish" button might **create a new, separate Google Cloud project** to host your Next.js application. This new project would then contain the deployed service (likely using Google Cloud Run managed by Firebase Studio/App Hosting).
     *   This approach is convenient for quick deployments managed by Studio but means the Next.js app might not reside in your primary Firebase project unless Studio offers options to target an existing project.
+    *   **Environment Variables for Frontend:** If using this method, ensure your `NEXT_PUBLIC_FIREBASE_...` variables are correctly configured in the environment settings provided by Firebase Studio for the deployed application.
 
 2.  **Firebase App Hosting (to an existing Firebase project):**
     *   If you want to deploy the Next.js application to your **existing Firebase project**, you can use Firebase App Hosting.
     *   **Initialize App Hosting:** If you haven't already, run `firebase init apphosting` in your project root and follow the prompts to connect it to your Firebase project. This will create or update `apphosting.yaml`.
     *   **Deploy:** Use the command `firebase deploy --only hosting` or `firebase deploy`. This will build your Next.js app and deploy it to a Cloud Run backend managed by App Hosting *within your selected Firebase project*.
     *   The `apphosting.yaml` file configures runtime aspects of this deployment (e.g., `maxInstances`).
+    *   **Environment Variables for Frontend:** Configure your `NEXT_PUBLIC_FIREBASE_...` variables in the Firebase console for your App Hosting backend or via the Firebase CLI.
 
 3.  **Other Platforms (Vercel, Netlify, Google Cloud Run direct):**
     *   You can also deploy your Next.js application to other platforms like Vercel (ideal for Next.js), Netlify, or directly to Google Cloud Run by containerizing your application (e.g., with Docker). This gives you more control but requires more setup.
+    *   **Environment Variables for Frontend:** You'll need to configure your `NEXT_PUBLIC_FIREBASE_...` variables in the environment settings of your chosen platform.
 
 **Choosing a Deployment Method for Next.js:**
 *   If the **Firebase Studio "Publish" button** meets your needs and you are okay with it potentially creating a new GCP project for the app, it's a simple option.
@@ -179,13 +184,13 @@ There are several ways to deploy the Next.js frontend application:
 For a new developer joining the project, we recommend starting with the following sections in this README:
 1.  **Core Features**: To understand the project's goals.
 2.  **Project Structure**: To get an overview of the codebase organization, noting the separation between the Next.js app (`src/`) and the Firebase Cloud Functions (`functions/`).
-3.  **Getting Started (Frontend)**: For setting up the Next.js development environment.
-4.  **Backend Scanning Service Setup (Firebase Cloud Functions)**: For understanding and setting up the Firebase Cloud Functions, Firestore, and Secret Manager.
+3.  **Getting Started (Frontend)**: For setting up the Next.js development environment, including the `.env.local` file for Firebase client keys.
+4.  **Backend Scanning Service Setup (Firebase Cloud Functions)**: For understanding and setting up the Firebase Cloud Functions, Firestore, and **especially Firebase Secret Manager for GitHub/GitLab API keys**.
 5.  **Deploying the Next.js Frontend Application**: To understand the different ways the frontend can be deployed.
 6.  **Confirming the Backend Service is Working**: To verify the entire setup.
 
 Key technologies include Next.js, React, ShadCN UI, and TailwindCSS for the frontend. The backend consists of Firebase Cloud Functions (for scheduled and manual scanning), Firestore (database), Firebase Secret Manager (for API keys), and Genkit (for AI-powered analysis flows using Google's Gemini models, called from Next.js Server Actions).
-The `functions/` directory contains the backend scanning logic.
+The `functions/` directory contains the backend scanning logic for GitHub and GitLab.
 The `src/ai/flows/` directory contains Genkit AI flows.
 The `src/app/` directory contains the Next.js frontend pages and server actions.
 The `scan_config/status` document in Firestore stores the `lastRunStart` and `lastRunFinish` timestamps for the scanner.

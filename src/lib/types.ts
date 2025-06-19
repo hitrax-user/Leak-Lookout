@@ -63,8 +63,9 @@ export interface LeakedKeyFromFirestore {
 }
 
 // Type for scan status displayed on settings page
+// isPaused has been removed as per user request.
 export interface ScanStatus {
-  isPaused: boolean;
+  // isPaused: boolean; // Removed
   lastRunStart: string | null;
   lastRunFinish: string | null;
   error?: string; // Optional error message for fetching status

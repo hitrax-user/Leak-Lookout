@@ -55,20 +55,10 @@ export async function triggerManualScanAction(): Promise<{ success: boolean; mes
   }
 }
 
-// Action to set scan pause status
-const setScanPausedCallable = httpsCallable(functions, 'setScanPaused');
-export async function setScanPausedAction(paused: boolean): Promise<{ success: boolean; message: string }> {
-  try {
-    const result = await setScanPausedCallable({ paused }) as HttpsCallableResult<{ success: boolean; message: string }>;
-    return result.data;
-  } catch (error: any) {
-    console.error("Error setting scan pause status:", error);
-    return { success: false, message: error.message || "Failed to set scan pause status." };
-  }
-}
+// setScanPausedAction has been removed as per user request.
 
-// Action to get current scan status from Firestore
-export async function getScanStatusAction(): Promise<ScanStatus> {
+// Action to get current scan status (run times) from Firestore
+export async function getScanStatusAction(): Promise<Omit<ScanStatus, 'isPaused'>> {
   try {
     const docRef = doc(db, 'scan_config', 'status');
     const docSnap = await getDoc(docRef);
@@ -80,17 +70,17 @@ export async function getScanStatusAction(): Promise<ScanStatus> {
         ts ? ts.toDate().toISOString() : null;
 
       return {
-        isPaused: data.isPaused ?? false,
+        // isPaused is removed
         lastRunStart: convertTimestamp(data.lastRunStart),
         lastRunFinish: convertTimestamp(data.lastRunFinish),
       };
     } else {
       // Default status if document doesn't exist
-      return { isPaused: false, lastRunStart: null, lastRunFinish: null };
+      return { lastRunStart: null, lastRunFinish: null };
     }
   } catch (error) {
     console.error("Error fetching scan status:", error);
     // Return default/error state
-    return { isPaused: false, lastRunStart: null, lastRunFinish: null, error: "Failed to fetch status" };
+    return { lastRunStart: null, lastRunFinish: null, error: "Failed to fetch status" };
   }
 }

@@ -1,5 +1,6 @@
 /**
  * @fileOverview Service for managing scan configuration and status in Firestore.
+ * This service now only manages last run timestamps, as pause functionality was removed.
  */
 import * as admin from 'firebase-admin';
 import { logger } from 'firebase-functions';
@@ -11,35 +12,26 @@ if (!admin.apps.length) {
 }
 const db = admin.firestore();
 const SCAN_CONFIG_COLLECTION = 'scan_config';
-const SCAN_STATUS_DOC_ID = 'status'; // Using a more specific ID for the document
+const SCAN_STATUS_DOC_ID = 'status'; 
 
-// Get current scan configuration (e.g., pause status)
-export async function getScanConfig(): Promise<ScanConfig | null> {
+// Get current scan configuration (last run times)
+export async function getScanRunTimestamps(): Promise<Pick<ScanConfig, 'lastRunStart' | 'lastRunFinish'>> {
   try {
     const docRef = db.collection(SCAN_CONFIG_COLLECTION).doc(SCAN_STATUS_DOC_ID);
     const docSnap = await docRef.get();
     if (docSnap.exists) {
-      return docSnap.data() as ScanConfig;
+      const data = docSnap.data() as ScanConfig;
+      return { lastRunStart: data.lastRunStart || null, lastRunFinish: data.lastRunFinish || null };
     }
-    // Default to not paused if no config exists
-    return { isPaused: false, lastRunStart: null, lastRunFinish: null };
+    // Default if no config exists
+    return { lastRunStart: null, lastRunFinish: null };
   } catch (error) {
-    logger.error('Error fetching scan config:', error);
-    return { isPaused: false, lastRunStart: null, lastRunFinish: null }; // Fallback
+    logger.error('Error fetching scan run timestamps:', error);
+    return { lastRunStart: null, lastRunFinish: null }; // Fallback
   }
 }
 
-// Update the paused status for scheduled scans
-export async function updateScanPausedStatus(isPaused: boolean): Promise<void> {
-  try {
-    const docRef = db.collection(SCAN_CONFIG_COLLECTION).doc(SCAN_STATUS_DOC_ID);
-    await docRef.set({ isPaused }, { merge: true });
-    logger.info(`Scan paused status updated to: ${isPaused}`);
-  } catch (error) {
-    logger.error('Error updating scan paused status:', error);
-    throw error;
-  }
-}
+// updateScanPausedStatus function removed.
 
 // Update the last run start timestamp
 export async function updateLastRunStart(): Promise<void> {

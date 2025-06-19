@@ -16,8 +16,7 @@ Leak Lookout is an intelligent tool designed to help identify and manage potenti
 *   **Settings & Scanner Control:**
     *   Configure API keys for enhanced scanning (backend function uses keys from Firebase Secret Manager).
     *   Manually trigger a scan.
-    *   Pause or resume scheduled scans.
-    *   View basic status of the scanner (paused/active, last run times).
+    *   View basic status of the scanner (last run times). Pause functionality for scheduled scans has been removed by request.
 
 ## Project Structure
 
@@ -29,13 +28,13 @@ Leak Lookout is an intelligent tool designed to help identify and manage potenti
     *   `lib/`: Utilities, types, Firebase client setup.
 *   `functions/`: Firebase Cloud Functions for backend services.
     *   `src/`: Source code for the Cloud Functions.
-        *   `index.ts`: Main entry point for Cloud Functions (scheduled scanner, manual trigger, pause control).
+        *   `index.ts`: Main entry point for Cloud Functions (scheduled scanner, manual trigger).
         *   `coreScanner.ts`: Core logic for performing scans.
         *   `scanner.ts`: Logic for processing individual repositories/projects and files.
         *   `githubClient.ts`: Client for GitHub API.
         *   `gitlabClient.ts`: Client for GitLab API.
         *   `firestoreService.ts`: Service for saving leaks to Firestore.
-        *   `configService.ts`: Service for managing scanner configuration (pause status, run times) in Firestore.
+        *   `configService.ts`: Service for managing scanner configuration (run times) in Firestore.
         *   `utils.ts`: Utilities for scanning (regex, entropy).
         *   `types.ts`: TypeScript types for backend functions.
     *   `package.json`: Dependencies for Cloud Functions.
@@ -68,15 +67,13 @@ Leak Lookout is an intelligent tool designed to help identify and manage potenti
     ```
 3.  **Run the Development Server:**
     ```bash
-    npm run dev
-    # or
-    yarn dev
+    npx next dev --turbopack -p 9002
     ```
     The application will be available at `http://localhost:9002`.
 
 ## Backend Scanning Service Setup
 
-The backend service uses a Firebase Cloud Function (`scheduledLeakScanner`) to scan GitHub and GitLab for leaks. It can also be triggered manually and paused/resumed via the Settings page.
+The backend service uses a Firebase Cloud Function (`scheduledLeakScanner`) to scan GitHub and GitLab for leaks. It can also be triggered manually via the Settings page.
 
 **Prerequisites:**
 
@@ -133,27 +130,27 @@ The backend service uses a Firebase Cloud Function (`scheduledLeakScanner`) to s
       }
     }
     ```
-    Apply these rules in the Firebase Console -> Firestore Database -> Rules. For `scan_config/status` writes, ensure the HTTP-callable function `setScanPaused` has appropriate invoker permissions if you restrict direct client writes.
+    Apply these rules in the Firebase Console -> Firestore Database -> Rules. For `scan_config/status` writes, ensure the HTTP-callable function `triggerManualScan` (which implicitly updates run times) has appropriate invoker permissions if you restrict direct client writes too heavily or if you add more client-write operations to this doc in the future.
 
 ## Confirming the Backend Service is Working
 
 1.  **Check Firebase Cloud Function Logs:**
     *   Go to the Firebase Console -> Functions.
-    *   Select the `scheduledLeakScanner`, `triggerManualScan`, and `setScanPaused` functions.
+    *   Select the `scheduledLeakScanner` and `triggerManualScan` functions.
     *   Navigate to the "Logs" tab for each.
     *   After the `scheduledLeakScanner`'s run (every hour) or after triggering a manual scan from the Settings page, you should see logs indicating it started, searched repositories, processed files, and completed. Look for any error messages.
-    *   You can call `triggerManualScan` and `setScanPaused` via the Settings page in the app.
+    *   You can call `triggerManualScan` via the Settings page in the app.
 
 2.  **Inspect Firestore Data:**
     *   Go to the Firebase Console -> Firestore Database.
     *   Look for a collection named `leaks`. If the scanner finds potential leaks, new documents will appear here.
-    *   Look for a collection `scan_config` with a document `status`. This document should contain `isPaused`, `lastRunStart`, and `lastRunFinish` fields, which are updated by the scanner and control functions.
+    *   Look for a collection `scan_config` with a document `status`. This document should contain `lastRunStart`, and `lastRunFinish` fields, which are updated by the scanner functions.
 
 3.  **Verify Dashboard and Settings Page:**
     *   Open the Leak Lookout application in your browser.
     *   The dashboard should populate with leaks from the Firestore `leaks` collection.
-    *   The Settings page should display the current scanner status (Paused/Active, last run times) from `scan_config/status`.
-    *   Test the "Run Scan Manually" and "Pause/Resume Scheduled Scans" buttons on the Settings page. Observe logs and Firestore data changes.
+    *   The Settings page should display the last run times from `scan_config/status`.
+    *   Test the "Run Scan Manually" button on the Settings page. Observe logs and Firestore data changes.
 
 4.  **Test with Emulators (Development):**
     *   Run `firebase emulators:start`. Your Next.js app's Firebase client (`src/lib/firebase.ts`) and Cloud Functions can be configured to connect to emulators for local testing. This often involves conditional connection logic based on an environment variable like `FIREBASE_EMULATOR_HOST`.
@@ -169,7 +166,11 @@ For a new developer joining the project, we recommend starting with the followin
 4.  **Backend Scanning Service Setup**: For understanding and setting up the Firebase Cloud Functions, Firestore, and Secret Manager.
 5.  **Confirming the Backend Service is Working**: To verify the entire setup.
 
-Key technologies include Next.js, React, ShadCN UI, and TailwindCSS for the frontend. The backend consists of Firebase Cloud Functions (for scheduled and manual scanning, pause control), Firestore (database), Firebase Secret Manager (for API keys), and Genkit (for AI-powered analysis flows using Google's Gemini models, called from Next.js Server Actions).
+Key technologies include Next.js, React, ShadCN UI, and TailwindCSS for the frontend. The backend consists of Firebase Cloud Functions (for scheduled and manual scanning), Firestore (database), Firebase Secret Manager (for API keys), and Genkit (for AI-powered analysis flows using Google's Gemini models, called from Next.js Server Actions).
 The `functions/` directory contains the backend scanning logic.
 The `src/ai/flows/` directory contains Genkit AI flows.
 The `src/app/` directory contains the Next.js frontend pages and server actions.
+The `scan_config/status` document in Firestore stores the `lastRunStart` and `lastRunFinish` timestamps for the scanner.
+The `triggerManualScan` Firebase Cloud Function allows on-demand execution of the scan logic.
+Scheduled scans run hourly via the `scheduledLeakScanner` Firebase Cloud Function.
+There is no pause/resume functionality for scheduled scans.

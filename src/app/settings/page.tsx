@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Settings, Github, Gitlab, PlayCircle, PauseCircle, Info, RefreshCw, Loader2 } from 'lucide-react';
+import { Settings, Github, Gitlab, PlayCircle, Info, RefreshCw, Loader2 } from 'lucide-react'; // PauseCircle removed
 import PageHeader from '@/components/shared/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Separator } from '@/components/ui/separator';
-import { triggerManualScanAction, setScanPausedAction, getScanStatusAction } from '@/app/actions';
+import { triggerManualScanAction, getScanStatusAction } from '@/app/actions'; // setScanPausedAction removed
 import type { ScanStatus } from '@/lib/types';
 import { format, parseISO } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -21,20 +21,21 @@ export default function SettingsPage() {
   const [githubApiKey, setGithubApiKey] = useState('');
   const [gitlabApiKey, setGitlabApiKey] = useState('');
   
-  const [scanStatus, setScanStatus] = useState<ScanStatus | null>(null);
+  // ScanStatus type in state will no longer include isPaused
+  const [scanStatus, setScanStatus] = useState<Omit<ScanStatus, 'isPaused'> | null>(null);
   const [isLoadingStatus, setIsLoadingStatus] = useState(true);
   const [isTriggeringScan, setIsTriggeringScan] = useState(false);
-  const [isTogglingPause, setIsTogglingPause] = useState(false);
+  // isTogglingPause removed
 
   const fetchScanStatus = useCallback(async () => {
     setIsLoadingStatus(true);
     try {
-      const status = await getScanStatusAction();
+      const status = await getScanStatusAction(); // This action now returns Omit<ScanStatus, 'isPaused'>
       setScanStatus(status);
     } catch (error) {
       console.error("Failed to fetch scan status:", error);
       toast({ variant: 'destructive', title: 'Error', description: 'Could not load scanner status.' });
-      setScanStatus({ isPaused: false, lastRunStart: null, lastRunFinish: null, error: "Failed to load" });
+      setScanStatus({ lastRunStart: null, lastRunFinish: null, error: "Failed to load" });
     } finally {
       setIsLoadingStatus(false);
     }
@@ -71,20 +72,8 @@ export default function SettingsPage() {
     setIsTriggeringScan(false);
   };
 
-  const handleTogglePause = async () => {
-    if (!scanStatus) return;
-    setIsTogglingPause(true);
-    const newPausedState = !scanStatus.isPaused;
-    const result = await setScanPausedAction(newPausedState);
-    if (result.success) {
-      toast({ title: 'Success', description: result.message });
-      setScanStatus(prev => prev ? { ...prev, isPaused: newPausedState } : null);
-    } else {
-      toast({ variant: 'destructive', title: 'Error', description: result.message });
-    }
-    setIsTogglingPause(false);
-  };
-  
+  // handleTogglePause function removed
+
   const formatTimestamp = (timestamp: string | null): string => {
     if (!timestamp) return 'N/A';
     try {
@@ -102,7 +91,7 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle>Scanner Control</CardTitle>
           <CardDescription>
-            Manage and monitor the automated leak scanning service.
+            Manage and monitor the automated leak scanning service. Scheduled scans run hourly.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -110,17 +99,15 @@ export default function SettingsPage() {
             <>
               <Skeleton className="h-5 w-1/2" />
               <Skeleton className="h-5 w-2/3" />
-              <Skeleton className="h-5 w-3/4" />
             </>
           ) : scanStatus?.error ? (
              <p className="text-destructive">Error loading scanner status: {scanStatus.error}</p>
           ) : (
             <>
+              {/* Paused status display removed */}
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Scheduled Scans Status:</span>
-                <span className={`text-sm font-semibold ${scanStatus?.isPaused ? 'text-yellow-600' : 'text-green-600'}`}>
-                  {scanStatus?.isPaused ? 'Paused' : 'Active'}
-                </span>
+                <span className="text-sm font-medium">Scheduled Scans:</span>
+                <span className="text-sm font-semibold text-green-600">Active (runs hourly)</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium">Last Scan Started:</span>
@@ -142,15 +129,7 @@ export default function SettingsPage() {
             {isTriggeringScan ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlayCircle className="mr-2 h-4 w-4" />}
             Run Scan Manually
           </Button>
-          <Button 
-            variant="outline" 
-            onClick={handleTogglePause} 
-            disabled={isTogglingPause || isLoadingStatus || scanStatus?.error !== undefined}
-            className="w-full sm:w-auto"
-          >
-            {isTogglingPause ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (scanStatus?.isPaused ? <PlayCircle className="mr-2 h-4 w-4" /> : <PauseCircle className="mr-2 h-4 w-4" />)}
-            {scanStatus?.isPaused ? 'Resume Scheduled Scans' : 'Pause Scheduled Scans'}
-          </Button>
+          {/* Pause/Resume button removed */}
            <Button 
             variant="ghost" 
             onClick={fetchScanStatus} 

@@ -153,8 +153,9 @@ export type PartialLeakedKey = Omit<LeakedKeyDocument, 'id' | 'detectionTimestam
 
 
 // Scan Configuration/Status Type for Firestore
+// isPaused has been removed as per user request.
 export interface ScanConfig {
-  isPaused: boolean;
+  // isPaused: boolean; // Removed
   lastRunStart: admin.firestore.Timestamp | null;
   lastRunFinish: admin.firestore.Timestamp | null;
 }

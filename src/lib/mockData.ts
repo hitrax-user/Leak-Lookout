@@ -27,6 +27,5 @@ export const mockLeaks: LeakedKey[] = [
   // }
 ];
 
-// It is recommended to remove or comment out the usage of mockLeaks 
-// in useLeaks.ts once Firestore integration is confirmed to be working.
 // The useLeaks.ts hook has been updated to primarily use Firestore.
+// This mock data is no longer the primary source for the dashboard.

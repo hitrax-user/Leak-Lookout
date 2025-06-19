@@ -3,10 +3,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { LeakedKey, LeakStatus, LeakedKeyFromFirestore } from '@/lib/types';
-// import { mockLeaks } from '@/lib/mockData'; // Will be replaced by Firestore
 import { useToast } from '@/hooks/use-toast';
 import { enhanceLeakContextAction, validateLeakedKeyAction } from '@/app/actions';
-import { db } from '@/lib/firebase'; // Import Firestore instance
+import { db } from '@/lib/firebase'; 
 import { collection, onSnapshot, orderBy, query, doc, updateDoc, Timestamp } from 'firebase/firestore';
 
 export function useLeaks() {
@@ -18,14 +17,13 @@ export function useLeaks() {
   useEffect(() => {
     setIsLoading(true);
     const leaksCollectionRef = collection(db, 'leaks');
-    // Order by detectionTimestamp descending
     const q = query(leaksCollectionRef, orderBy('detectionTimestamp', 'desc'));
 
     const unsubscribe = onSnapshot(q, 
       (snapshot) => {
         const fetchedLeaks: LeakedKey[] = snapshot.docs.map(docSnap => {
           const data = docSnap.data() as LeakedKeyFromFirestore;
-          // Convert Firestore Timestamps to ISO strings
+          
           const detectionTimestamp = data.detectionTimestamp instanceof Timestamp 
             ? data.detectionTimestamp.toDate().toISOString() 
             : typeof data.detectionTimestamp === 'string' ? data.detectionTimestamp : new Date().toISOString();
@@ -40,7 +38,7 @@ export function useLeaks() {
 
           return {
             ...data,
-            id: docSnap.id, // Use Firestore document ID
+            id: docSnap.id, 
             detectionTimestamp,
             lastScanned,
             lastValidatedTimestamp,
@@ -53,8 +51,6 @@ export function useLeaks() {
       (err) => {
         console.error("Error fetching leaks from Firestore:", err);
         setError("Failed to load leaks. Please try again later.");
-        // Fallback to mock data or empty array if Firestore fails
-        // setLeaks(mockLeaks.sort((a,b) => new Date(b.detectionTimestamp).getTime() - new Date(a.detectionTimestamp).getTime()));
         setLeaks([]);
         setIsLoading(false);
         toast({
@@ -65,7 +61,6 @@ export function useLeaks() {
       }
     );
 
-    // Cleanup subscription on unmount
     return () => unsubscribe();
   }, [toast]);
 
@@ -73,8 +68,6 @@ export function useLeaks() {
     const leakDocRef = doc(db, 'leaks', id);
     try {
       await updateDoc(leakDocRef, { status });
-      // Optimistic update handled by onSnapshot, or can be done here:
-      // setLeaks(prevLeaks => prevLeaks.map(leak => leak.id === id ? { ...leak, status } : leak));
     } catch (err) {
       console.error("Error updating leak status in Firestore:", err);
       toast({
@@ -98,7 +91,7 @@ export function useLeaks() {
     }
 
     const originalStatus = leakToEnhance.status;
-    updateLeakStatusInFirestore(leakId, 'enhancing_context'); // Update status in Firestore
+    updateLeakStatusInFirestore(leakId, 'enhancing_context'); 
 
     try {
       const result = await enhanceLeakContextAction({
@@ -111,9 +104,8 @@ export function useLeaks() {
         enhancedContext: result.enhancedContext,
         isLikelyLeak: result.isLikelyLeak,
         status: (originalStatus === 'enhancing_context' || originalStatus === 'error_enhancing_context') ? 'new' : originalStatus,
-        lastScanned: new Date().toISOString(), // Store as ISO string
+        lastScanned: new Date().toISOString(), 
       });
-      // Firestore onSnapshot will update the local state
       toast({
         title: "AI Context Analysis Complete",
         description: `Context enhanced for leak ${leakId}.`,
@@ -143,14 +135,11 @@ export function useLeaks() {
     }
 
     const originalStatus = leakToValidate.status;
-    updateLeakStatusInFirestore(leakId, 'validating_key'); // Update status in Firestore
+    updateLeakStatusInFirestore(leakId, 'validating_key'); 
 
     try {
       const result = await validateLeakedKeyAction({
-        // This should ideally be the actual key, but apiKeyPreview is used for safety in this prototype.
-        // In a real system, you'd need a secure way to handle the actual key for validation if absolutely necessary
-        // or rely on metadata/provider checks if possible without exposing the key.
-        key: leakToValidate.apiKeyPreview, // CAUTION: This is a preview. Real validation might need the full key.
+        key: leakToValidate.apiKeyPreview, 
         keyType: leakToValidate.keyType,
         sourceUrl: leakToValidate.sourceUrl,
       });
@@ -161,9 +150,8 @@ export function useLeaks() {
         accessibleResources: result.accessibleResources,
         riskLevel: result.riskLevel,
         status: (originalStatus === 'validating_key' || originalStatus === 'error_validating_key') ? 'new' : originalStatus,
-        lastValidatedTimestamp: new Date().toISOString(), // Store as ISO string
+        lastValidatedTimestamp: new Date().toISOString(), 
       });
-       // Firestore onSnapshot will update the local state
       toast({
         title: "AI Key Validation Complete",
         description: `Key validation performed for leak ${leakId}.`,
@@ -186,6 +174,5 @@ export function useLeaks() {
     }
   }, [leaks, toast]); 
 
-  // Expose setLeaks for potential direct manipulation if ever needed (e.g. after a bulk operation not via snapshot)
   return { leaks, isLoading, error, updateLeakStatus, enhanceContext, validateKey, setLeaks };
 }

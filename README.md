@@ -144,4 +144,3 @@ For a new developer joining the project, we recommend starting with the followin
 5.  **Confirming the Backend Service is Working**: To verify the setup.
 
 Key technologies include Next.js, React, ShadCN UI, and TailwindCSS for the frontend. The backend consists of Firebase Cloud Functions (for scheduled scanning), Firestore (database), Firebase Secret Manager (for API keys), and Genkit (for AI-powered analysis flows using Google's Gemini models).
-```

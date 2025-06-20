@@ -5,7 +5,6 @@ import { logger } from 'firebase-functions';
 import { searchRepositories as searchGithubRepositories } from './githubClient';
 import { searchProjects as searchGitlabProjects } from './gitlabClient';
 import { processGithubRepo, processGitlabProject } from './scanner';
-import { updateLastRunStart, updateLastRunFinish } from './configService';
 
 const GITHUB_LANGUAGES_QUERY = 'language:javascript language:python language:go';
 const KEYWORDS_QUERY_PART = 'api_key OR secret OR token OR "api key" OR "access_token" OR "access token" OR "client_secret" OR "client secret"';
@@ -16,7 +15,6 @@ const REPOS_PER_PROVIDER_PER_RUN = 50;
 
 export async function executeScanLogic(triggerId: string = 'unknown-trigger'): Promise<void> {
   logger.info('Starting core scan logic.', { triggerId });
-  await updateLastRunStart();
 
   try {
     // Fetch GitHub Repositories
@@ -64,6 +62,5 @@ export async function executeScanLogic(triggerId: string = 'unknown-trigger'): P
     logger.error('Error during GitLab project search or processing phase:', error, { triggerId });
   }
 
-  await updateLastRunFinish();
   logger.info('Core scan logic completed.', { triggerId });
 }

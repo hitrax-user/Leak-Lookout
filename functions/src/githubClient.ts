@@ -2,7 +2,7 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
 import { logger } from 'firebase-functions';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import { sleep } from './utils';
-import type { GithubRepo, GithubContent, GithubCommit, GithubUser, GithubFork } from './types';
+import type { GithubRepo, GithubContent, GithubCommit, GithubFork } from './types';
 
 const GITHUB_API_BASE_URL = 'https://api.github.com';
 const MAX_RETRIES = 3;

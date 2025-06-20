@@ -159,3 +159,9 @@ export interface ScanConfig {
   lastRunStart: admin.firestore.Timestamp | null;
   lastRunFinish: admin.firestore.Timestamp | null;
 }
+
+export interface Scan {
+  id: string;
+  repoName: string;
+  provider: 'github';
+}

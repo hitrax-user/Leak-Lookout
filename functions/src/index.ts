@@ -1,54 +1,44 @@
-import * as functions from 'firebase-functions';
+import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { logger } from 'firebase-functions';
-import { executeScanLogic } from './coreScanner';
-import * as admin from 'firebase-admin';
+import { performScan } from './scanner';
+import { Scan } from './types';
+import { updateScanConfigStatus } from './configService';
+import { AxiosError } from 'axios';
 
-// Ensure Firebase Admin is initialized only once
-if (!admin.apps.length) {
-  admin.initializeApp();
-}
+const GITHUB_SCAN_PATH = 'github_repos_to_scan/{scanId}';
 
-// Scheduled function (remains the same trigger, but calls shared logic)
-export const scheduledLeakScanner = functions
-  .runWith({
-    timeoutSeconds: 540,
-    memory: '1GB',
-    // secrets: [process.env.GITHUB_API_KEY_SECRET_NAME!, process.env.GITLAB_API_KEY_SECRET_NAME!], // Define in .env or GCloud console for functions
-  })
-  .pubsub.schedule('every 1 hours')
-  .onRun(async (context) => {
-    logger.info('Scheduled leak scanning function triggered.', { eventId: context.eventId });
-    try {
-      // Pause check removed as per user request
-      await executeScanLogic(context.eventId);
-      logger.info('Scheduled leak scanning function completed successfully.');
-    } catch (error) {
-      logger.error('Error in scheduledLeakScanner:', error, { eventId: context.eventId });
+export const onGithubScanRequest = onDocumentCreated(GITHUB_SCAN_PATH, async (event) => {
+  const snapshot = event.data;
+  if (!snapshot) {
+    logger.info('No data associated with the event');
+    return;
+  }
+  const scan = snapshot.data() as Scan;
+  logger.info(`New scan request received: ${scan.id}`);
+
+  try {
+    await performScan(scan);
+  } catch (error) {
+    logger.error(`Scan failed for document ${scan.id}:`, error);
+
+    // Type-safe error handling
+    let isAuthError = false;
+    if (error instanceof AxiosError) {
+      if (error.response?.status === 401) {
+        isAuthError = true;
+      }
     }
-    return null;
-  });
 
-// HTTP-callable function to trigger a scan manually
-export const triggerManualScan = functions
-  .runWith({ timeoutSeconds: 540, memory: '1GB' })
-  .https.onCall(async (data, context) => {
-    // Optional: Add authentication check here if needed
-    // if (!context.auth) {
-    //   throw new functions.https.HttpsError('unauthenticated', 'The function must be called while authenticated.');
-    // }
-    const eventId = `manual-${Date.now()}`;
-    logger.info('Manual scan triggered.', { eventId, byUser: context.auth?.uid });
-    try {
-      await executeScanLogic(eventId);
-      logger.info('Manual scan completed successfully.', { eventId });
-      return { success: true, message: 'Manual scan initiated and completed successfully.' };
-    } catch (error) {
-      logger.error('Error during manual scan:', error, { eventId });
-      throw new functions.https.HttpsError('internal', 'Failed to complete manual scan.', error);
+    if (isAuthError) {
+      logger.error(`CRITICAL: Authentication failed for scan ${scan.id}. Deactivating.`);
+      await updateScanConfigStatus(scan.id, 'INVALID_TOKEN');
+      // DO NOT re-throw, to prevent Cloud Function retries for auth errors.
+    } else {
+      // For other errors, re-throw to allow for retries on transient issues.
+      await updateScanConfigStatus(scan.id, 'FAILED_TRANSIENT');
+      throw error;
     }
-  });
+  }
+});
 
-// setScanPaused function has been removed as per user request.
-// The configService will no longer store or manage an isPaused state.
-// The UI on the settings page will also be updated to remove pause/resume controls.
-// The getScanConfig will only return last run times.
+// Other functions from the file would go here...

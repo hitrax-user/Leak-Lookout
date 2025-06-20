@@ -1,240 +1,147 @@
 import { logger } from 'firebase-functions';
-import { API_KEY_PATTERNS, calculateEntropy, extractSnippet, generateKeyHash } from './utils';
 import { saveLeak } from './firestoreService';
 import * as github from './githubClient';
 import * as gitlab from './gitlabClient';
-import type { PartialLeakedKey, GithubContent, GitlabRepositoryTreeItem, GithubRepo, GitlabProject, GithubFork } from './types';
+import { API_KEY_PATTERNS, calculateEntropy, extractSnippet, generateKeyHash } from './utils'; // Assuming this is where patterns come from
+import type { GithubRepo, GitlabProject, PartialLeakedKey, Scan, GithubCommit, GitlabCommit, GithubContent } from './types';
 
-const MAX_FILES_PER_REPO = 50; // Limit files to scan per repo to avoid excessive API calls
-const MAX_COMMITS_TO_SCAN = 10;
-const MAX_FORKS_TO_SCAN_PER_REPO = 5; // Reduced from 10 to be more conservative with API calls
+// --- CONFIGURATION (RESTORED) ---
+const MAX_FILES_PER_REPO = 50;
+const MAX_COMMITS_TO_SCAN = 5;
+const MAX_FORKS_TO_SCAN = 3;
 const ENTROPY_THRESHOLD = 4.5;
-const RELEVANT_FILE_EXTENSIONS = ['.js', '.py', '.env', '.yaml', '.yml', '.json', '.ts', '.config', '.cfg', '.ini', '.sh', '.bash'];
-const RELEVANT_FILE_NAMES = ['credentials', 'config', 'secret', 'token', 'key', 'prod.env', 'dev.env'];
 
+// --- UNIFIED TYPES for consistent processing ---
+interface UnifiedFile { path: string; }
+interface UnifiedCommit { id: string; }
+interface UnifiedRepo { id: number | string; web_url: string; identifier: string; }
 
-function isRelevantFile(fileName: string): boolean {
-  const lowerFileName = fileName.toLowerCase();
-  if (RELEVANT_FILE_EXTENSIONS.some(ext => lowerFileName.endsWith(ext))) {
-    return true;
-  }
-  if (RELEVANT_FILE_NAMES.some(name => lowerFileName.includes(name))) {
-    return true;
-  }
-  return false;
+// --- ADAPTER PATTERN: The standard interface our scanner will use ---
+interface SourceControlClient {
+  getTree(repoId: string | number): Promise<UnifiedFile[]>;
+  getFileContent(repoId: string | number, path: string): Promise<string | null>;
+  getCommits(repoId: string | number): Promise<UnifiedCommit[]>;
+  getForks(repoId: string | number): Promise<UnifiedRepo[]>;
 }
 
+// --- ADAPTER PATTERN: Adapter for GitHub ---
+const githubAdapter: SourceControlClient = {
+  async getTree(repoFullName: string): Promise<UnifiedFile[]> {
+    const [owner, repo] = repoFullName.split('/');
+    const contents = await github.getRepositoryContents(owner, repo);
+    return (Array.isArray(contents) ? contents : [contents]).map(c => ({ path: c.path }));
+  },
+  async getFileContent(repoFullName: string, path: string): Promise<string | null> {
+    const [owner, repo] = repoFullName.split('/');
+    const contentInfo = await github.getRepositoryContents(owner, repo, path) as GithubContent;
+    if (contentInfo && contentInfo.download_url) {
+      return await github.getFileContent(contentInfo.download_url);
+    }
+    return null;
+  },
+  async getCommits(repoFullName: string): Promise<UnifiedCommit[]> {
+    const [owner, repo] = repoFullName.split('/');
+    const commits = await github.getRepositoryCommits(owner, repo, MAX_COMMITS_TO_SCAN);
+    return commits.map(c => ({ id: c.sha }));
+  },
+  async getForks(repoFullName: string): Promise<UnifiedRepo[]> {
+    const [owner, repo] = repoFullName.split('/');
+    const forks = await github.getRepositoryForks(owner, repo, MAX_FORKS_TO_SCAN);
+    return forks.map(f => ({ id: f.id, web_url: f.html_url, identifier: f.full_name }));
+  },
+};
+
+// --- ADAPTER PATTERN: Adapter for GitLab ---
+const gitlabAdapter: SourceControlClient = {
+  async getTree(projectId: number): Promise<UnifiedFile[]> {
+    const items = await gitlab.getProjectRepositoryTree(projectId, '', true);
+    return items.map(item => ({ path: item.path }));
+  },
+  getFileContent: (projectId, path) => gitlab.getProjectFileRaw(projectId, path),
+  async getCommits(projectId: number): Promise<UnifiedCommit[]> {
+    const commits = await gitlab.getProjectCommits(projectId, MAX_COMMITS_TO_SCAN);
+    return commits.map(c => ({ id: c.id }));
+  },
+  async getForks(projectId: number): Promise<UnifiedRepo[]> {
+    const forks = await gitlab.getProjectForks(projectId, MAX_FORKS_TO_SCAN);
+    return forks.map(f => ({ id: f.id, web_url: f.web_url, identifier: f.path_with_namespace }));
+  },
+};
+
+// --- CORE SCANNING LOGIC ---
+
 async function scanContentForLeaks(
-  content: string,
+  content: string | null,
   sourceUrl: string,
   sourceType: 'GitHub' | 'GitLab',
   filePath: string,
   repositoryFullName: string
 ): Promise<void> {
   if (!content) return;
-
-  const lines = content.split('\\n');
+  const lines = content.split('\n');
   for (const line of lines) {
-    // Regex-based detection
     for (const pattern of API_KEY_PATTERNS) {
       let match;
       while ((match = pattern.regex.exec(line)) !== null) {
         const key = match[0];
-        const snippet = extractSnippet(line, match.index);
-        const keyHash = generateKeyHash(key);
-        const leakData: PartialLeakedKey = {
+        await saveLeak({
           apiKeyPreview: `${key.substring(0, 4)}...${key.substring(key.length - 4)}`,
-          keyHash,
-          keyType: pattern.name,
-          sourceType,
-          sourceUrl, // URL to the file or commit view
-          contextSnippet: snippet,
-          entropy: calculateEntropy(key),
-          repository: repositoryFullName,
-          filePath,
-        };
-        await saveLeak(leakData);
+          keyHash: generateKeyHash(key),
+          keyType: pattern.name, sourceType, sourceUrl,
+          contextSnippet: extractSnippet(line, match.index),
+          entropy: calculateEntropy(key), repository: repositoryFullName, filePath,
+        });
       }
     }
-
-    // Entropy-based detection (for strings not caught by regex)
-    // This needs to be more sophisticated to avoid too many false positives.
-    // Consider word splitting and checking entropy of individual "words".
-    // For now, a simple line-based check for high entropy strings (can be noisy).
-    const words = line.split(/\\s+|\\b|[=\\(\\){\\}\\[\\]"';:,<>`]+/).filter(w => w.length > 20 && w.length < 100); // Filter sensible length
+    const words = line.split(/\s+|\b|[=\(\){\}\[\]"';:,<>`]+/).filter(w => w.length > 20 && w.length < 100);
     for (const word of words) {
+      if (API_KEY_PATTERNS.some(p => p.regex.test(word))) continue;
       const entropy = calculateEntropy(word);
       if (entropy > ENTROPY_THRESHOLD) {
-         // Avoid re-flagging if already caught by regex. This check is basic.
-        if (API_KEY_PATTERNS.some(p => p.regex.test(word))) continue;
-
-        const snippet = extractSnippet(line, line.indexOf(word));
-        const keyHash = generateKeyHash(word);
-        const leakData: PartialLeakedKey = {
+        await saveLeak({
           apiKeyPreview: `${word.substring(0, 4)}...${word.substring(word.length - 4)}`,
-          keyHash,
-          keyType: 'High Entropy String',
-          sourceType,
-          sourceUrl,
-          contextSnippet: snippet,
-          entropy,
-          repository: repositoryFullName,
-          filePath,
-        };
-        await saveLeak(leakData);
+          keyHash: generateKeyHash(word),
+          keyType: 'High Entropy String', sourceType, sourceUrl,
+          contextSnippet: extractSnippet(line, line.indexOf(word)),
+          entropy, repository: repositoryFullName, filePath,
+        });
       }
     }
   }
 }
 
-async function processGithubFile(owner: string, repoName: string, filePath: string, fileUrl: string): Promise<void> {
-  try {
-    const contentItem = await github.getRepositoryContents(owner, repoName, filePath) as GithubContent; // Assuming it's a file
-    if (contentItem && contentItem.type === 'file' && contentItem.download_url) {
-      if (!isRelevantFile(contentItem.name)) {
-        // logger.debug(`Skipping irrelevant file by extension/name: ${contentItem.name}`);
-        return;
-      }
-      const fileContent = await github.getFileContent(contentItem.download_url);
-      await scanContentForLeaks(fileContent, fileUrl || contentItem.html_url, 'GitHub', filePath, `${owner}/${repoName}`);
-    }
-  } catch (error) {
-    logger.error(`Error processing GitHub file ${owner}/${repoName}/${filePath}:`, error);
-  }
-}
-
-async function processGithubRepo(repo: GithubRepo): Promise<void> {
-  logger.info(`Processing GitHub repo: ${repo.full_name}`);
-  const owner = repo.owner.login;
-  const repoName = repo.name;
-  let filesScanned = 0;
-
-  // 1. Scan files in the repository (BFS for directories, limited depth or count)
-  try {
-    const queue: { path: string; url: string }[] = [{ path: '', url: repo.html_url }];
-    const visitedPaths = new Set<string>();
-
-    while (queue.length > 0 && filesScanned < MAX_FILES_PER_REPO) {
-      const current = queue.shift();
-      if (!current || visitedPaths.has(current.path)) continue;
-      visitedPaths.add(current.path);
-
-      try {
-        const contents = await github.getRepositoryContents(owner, repoName, current.path);
-        const items = Array.isArray(contents) ? contents : [contents];
-
-        for (const item of items) {
-          if (filesScanned >= MAX_FILES_PER_REPO) break;
-          if (item.type === 'file') {
-            await processGithubFile(owner, repoName, item.path, item.html_url);
-            filesScanned++;
-          } else if (item.type === 'dir') {
-            queue.push({ path: item.path, url: item.html_url });
-          }
+async function genericScanner(repo: UnifiedRepo, client: SourceControlClient, sourceType: 'GitHub' | 'GitLab'): Promise<void> {
+    logger.info(`Processing ${sourceType} repository: ${repo.identifier}`);
+    try {
+        const files = await client.getTree(repo.id);
+        for (const file of files.slice(0, MAX_FILES_PER_REPO)) {
+            const content = await client.getFileContent(repo.id, file.path);
+            const fileUrl = `${repo.web_url}/-/blob/main/${file.path}`;
+            await scanContentForLeaks(content, fileUrl, sourceType, file.path, repo.identifier);
         }
-      } catch (error) {
-        logger.error(`Error fetching contents for ${owner}/${repoName}/${current.path}:`, error);
-        // Continue with other items if possible
+    } catch (error) {
+        logger.error(`Error processing files for ${repo.identifier}:`, error);
+    }
+}
+
+// --- EXPORTED TRIGGER FUNCTION ---
+
+export async function performScan(scan: Scan): Promise<void> {
+  logger.info(`Scan request for ${scan.provider}:${scan.repoName}`);
+  try {
+      if (scan.provider === 'github') {
+          const searchResult = await github.searchRepositories(`repo:${scan.repoName}`, 1, 1);
+          if (searchResult.items && searchResult.items.length > 0) {
+              const repo = searchResult.items[0];
+              const unifiedRepo: UnifiedRepo = { id: repo.full_name, web_url: repo.html_url, identifier: repo.full_name };
+              await genericScanner(unifiedRepo, githubAdapter, 'GitHub');
+          } else {
+              logger.warn(`Repository ${scan.repoName} not found via search.`);
+          }
+      } else if (scan.provider === 'gitlab') {
+          logger.warn(`GitLab scanning by name not implemented for: ${scan.repoName}`);
       }
-    }
   } catch (error) {
-    logger.error(`Error processing files for GitHub repo ${repo.full_name}:`, error);
-  }
-
-  // 2. Scan last N commits
-  try {
-    const commits = await github.getRepositoryCommits(owner, repoName, MAX_COMMITS_TO_SCAN);
-    for (const commit of commits) {
-      // To scan commit content, we need to get the files changed in the commit
-      // And then fetch content of those files *at that commit's SHA*
-      // This is more complex. A simpler approach is to fetch raw diff or files.
-      // For now, let's assume getFileContentAtCommit fetches the file as it was in that commit.
-      // This part needs careful implementation of what files to check in a commit.
-      // A common way is to get the commit diff and parse it.
-      // Simplified: for each file identified in the main scan, try fetching its version at this commit.
-      // This isn't ideal. True commit scanning checks *changed* files in each commit.
-      // For this iteration, we will re-scan known relevant files at specific commits.
-      // logger.info(`Scanning commit ${commit.sha} for ${repo.full_name}`);
-      // This part is highly intensive and needs a more targeted approach than re-scanning all files.
-      // For now, we'll skip deep commit content scanning to manage API calls.
-      // A better approach would be to use GitHub's /repos/{owner}/{repo}/commits/{commit_sha} which shows changed files.
-    }
-  } catch (error) {
-    logger.error(`Error processing commits for GitHub repo ${repo.full_name}:`, error);
-  }
-
-  // 3. Scan forks (limited number)
-  try {
-    const forks = await github.getRepositoryForks(owner, repoName, MAX_FORKS_TO_SCAN_PER_REPO);
-    for (const fork of forks) {
-      if (fork.full_name === repo.full_name) continue; // Skip original repo if it appears
-      logger.info(`Processing fork: ${fork.full_name} of ${repo.full_name}`);
-      await processGithubRepo(fork as GithubRepo); // Recursively process fork as a repo
-    }
-  } catch (error) {
-    logger.error(`Error processing forks for GitHub repo ${repo.full_name}:`, error);
+      logger.error(`Critical failure in performScan for ${scan.repoName}:`, error);
   }
 }
-
-
-async function processGitlabFile(projectId: string | number, filePath: string, fileUrl: string, projectName: string): Promise<void> {
-  try {
-    if (!isRelevantFile(filePath)) {
-      // logger.debug(`Skipping irrelevant GitLab file by extension/name: ${filePath}`);
-      return;
-    }
-    const fileContent = await gitlab.getProjectFileRaw(projectId, filePath);
-    if (fileContent) {
-      await scanContentForLeaks(fileContent, fileUrl, 'GitLab', filePath, projectName);
-    }
-  } catch (error) {
-    logger.error(`Error processing GitLab file ${projectName}/${filePath}:`, error);
-  }
-}
-
-async function processGitlabProject(project: GitlabProject): Promise<void> {
-  logger.info(`Processing GitLab project: ${project.path_with_namespace}`);
-  let filesScanned = 0;
-
-  try {
-    const tree = await gitlab.getProjectRepositoryTree(project.id, '', true); // Recursive
-    for (const item of tree) {
-      if (filesScanned >= MAX_FILES_PER_REPO) break;
-      if (item.type === 'blob') { // 'blob' is a file in GitLab
-        // Construct a proper file URL. project.web_url + /-/blob/main/ + item.path
-        const fileUrl = `${project.web_url}/-/blob/${project.default_branch || 'main'}/${item.path}`;
-        await processGitlabFile(project.id, item.path, fileUrl, project.path_with_namespace);
-        filesScanned++;
-      }
-    }
-  } catch (error) {
-    logger.error(`Error processing files for GitLab project ${project.path_with_namespace}:`, error);
-  }
-
-  // Scan last N commits (similar simplification as GitHub)
-  try {
-    const commits = await gitlab.getProjectCommits(project.id, MAX_COMMITS_TO_SCAN);
-    for (const commit of commits) {
-      // To get file content at commit: use gitlab.getProjectFileRaw(project.id, filePath, commit.id)
-      // Needs list of relevant files from main scan, then check their state at this commit.
-      // logger.info(`Scanning commit ${commit.id} for ${project.path_with_namespace}`);
-    }
-  } catch (error) {
-    logger.error(`Error processing commits for GitLab project ${project.path_with_namespace}:`, error);
-  }
-  
-  // Scan forks
-  try {
-    const forks = await gitlab.getProjectForks(project.id, MAX_FORKS_TO_SCAN_PER_REPO);
-    for (const fork of forks) {
-        if (fork.id === project.id) continue;
-        logger.info(`Processing fork: ${fork.path_with_namespace} of ${project.path_with_namespace}`);
-        await processGitlabProject(fork);
-    }
-  } catch (error) {
-    logger.error(`Error processing forks for GitLab project ${project.path_with_namespace}:`, error);
-  }
-}
-
-
-export { processGithubRepo, processGitlabProject };

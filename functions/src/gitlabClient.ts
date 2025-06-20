@@ -2,7 +2,7 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
 import { logger } from 'firebase-functions';
 import { SecretManagerServiceClient } from '@google-cloud/secret-manager';
 import { sleep } from './utils';
-import type { GitlabProject, GitlabFile, GitlabCommit, GitlabRepositoryTreeItem } from './types';
+import type { GitlabProject, GitlabCommit, GitlabRepositoryTreeItem } from './types';
 
 
 const GITLAB_API_BASE_URL = 'https://gitlab.com/api/v4';

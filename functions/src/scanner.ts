@@ -3,7 +3,7 @@ import { saveLeak } from './firestoreService';
 import * as github from './githubClient';
 import * as gitlab from './gitlabClient';
 import { API_KEY_PATTERNS, calculateEntropy, extractSnippet, generateKeyHash } from './utils'; // Assuming this is where patterns come from
-import type { GithubRepo, GitlabProject, PartialLeakedKey, Scan, GithubCommit, GitlabCommit, GithubContent } from './types';
+import type { Scan, GithubContent } from './types';
 
 // --- CONFIGURATION (RESTORED) ---
 const MAX_FILES_PER_REPO = 50;
@@ -14,7 +14,7 @@ const ENTROPY_THRESHOLD = 4.5;
 // --- UNIFIED TYPES for consistent processing ---
 interface UnifiedFile { path: string; }
 interface UnifiedCommit { id: string; }
-interface UnifiedRepo { id: number | string; web_url: string; identifier: string; }
+interface UnifiedRepo { id: number | string; web_url: string; identifier: string; default_branch: string; }
 
 // --- ADAPTER PATTERN: The standard interface our scanner will use ---
 interface SourceControlClient {
@@ -34,8 +34,16 @@ const githubAdapter: SourceControlClient = {
   async getFileContent(repoFullName: string, path: string): Promise<string | null> {
     const [owner, repo] = repoFullName.split('/');
     const contentInfo = await github.getRepositoryContents(owner, repo, path) as GithubContent;
-    if (contentInfo && contentInfo.download_url) {
-      return await github.getFileContent(contentInfo.download_url);
+    
+    if (contentInfo) {
+      // Prefer the direct content if available (for files < 1MB)
+      if (contentInfo.content) {
+        return Buffer.from(contentInfo.content, 'base64').toString('utf8');
+      }
+      // Fallback to download_url for larger files
+      if (contentInfo.download_url) {
+        return await github.getFileContent(contentInfo.download_url);
+      }
     }
     return null;
   },
@@ -47,7 +55,7 @@ const githubAdapter: SourceControlClient = {
   async getForks(repoFullName: string): Promise<UnifiedRepo[]> {
     const [owner, repo] = repoFullName.split('/');
     const forks = await github.getRepositoryForks(owner, repo, MAX_FORKS_TO_SCAN);
-    return forks.map(f => ({ id: f.id, web_url: f.html_url, identifier: f.full_name }));
+    return forks.map(f => ({ id: f.id, web_url: f.html_url, identifier: f.full_name, default_branch: f.default_branch }));
   },
 };
 
@@ -64,7 +72,7 @@ const gitlabAdapter: SourceControlClient = {
   },
   async getForks(projectId: number): Promise<UnifiedRepo[]> {
     const forks = await gitlab.getProjectForks(projectId, MAX_FORKS_TO_SCAN);
-    return forks.map(f => ({ id: f.id, web_url: f.web_url, identifier: f.path_with_namespace }));
+    return forks.map(f => ({ id: f.id, web_url: f.web_url, identifier: f.path_with_namespace, default_branch: f.default_branch || 'main' }));
   },
 };
 
@@ -116,7 +124,8 @@ async function genericScanner(repo: UnifiedRepo, client: SourceControlClient, so
         const files = await client.getTree(repo.id);
         for (const file of files.slice(0, MAX_FILES_PER_REPO)) {
             const content = await client.getFileContent(repo.id, file.path);
-            const fileUrl = `${repo.web_url}/-/blob/main/${file.path}`;
+            // Use the dynamic default_branch for constructing the URL
+            const fileUrl = `${repo.web_url}/-/blob/${repo.default_branch}/${file.path}`;
             await scanContentForLeaks(content, fileUrl, sourceType, file.path, repo.identifier);
         }
     } catch (error) {
@@ -133,13 +142,30 @@ export async function performScan(scan: Scan): Promise<void> {
           const searchResult = await github.searchRepositories(`repo:${scan.repoName}`, 1, 1);
           if (searchResult.items && searchResult.items.length > 0) {
               const repo = searchResult.items[0];
-              const unifiedRepo: UnifiedRepo = { id: repo.full_name, web_url: repo.html_url, identifier: repo.full_name };
+              const unifiedRepo: UnifiedRepo = { 
+                id: repo.full_name, 
+                web_url: repo.html_url, 
+                identifier: repo.full_name,
+                default_branch: repo.default_branch 
+              };
               await genericScanner(unifiedRepo, githubAdapter, 'GitHub');
           } else {
               logger.warn(`Repository ${scan.repoName} not found via search.`);
           }
       } else if (scan.provider === 'gitlab') {
-          logger.warn(`GitLab scanning by name not implemented for: ${scan.repoName}`);
+          const searchResult = await gitlab.searchProjects(scan.repoName, 1, 1);
+          if (searchResult && searchResult.length > 0) {
+              const project = searchResult[0];
+              const unifiedRepo: UnifiedRepo = {
+                  id: project.id,
+                  web_url: project.web_url,
+                  identifier: project.path_with_namespace,
+                  default_branch: project.default_branch || 'main',
+              };
+              await genericScanner(unifiedRepo, gitlabAdapter, 'GitLab');
+          } else {
+              logger.warn(`GitLab project ${scan.repoName} not found via search.`);
+          }
       }
   } catch (error) {
       logger.error(`Critical failure in performScan for ${scan.repoName}:`, error);

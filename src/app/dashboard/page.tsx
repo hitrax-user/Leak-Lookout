@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { LayoutDashboard, Loader2, AlertTriangle, SearchSlash } from 'lucide-react';
+import { LayoutDashboard, Loader2, AlertTriangle, SearchSlash, BarChart } from 'lucide-react';
 import { useLeaks } from '@/hooks/useLeaks';
 import type { LeakedKey, FilterOptions, ApiKeySource, LeakStatus } from '@/lib/types';
 import { Button } from '@/components/ui/button';
@@ -13,6 +13,7 @@ import LeakStatusBadge from '@/components/dashboard/LeakStatusBadge';
 import ApiKeyIcon from '@/components/dashboard/ApiKeyIcon';
 import LeakDetailModal from '@/components/dashboard/LeakDetailModal';
 import DashboardFilters from '@/components/dashboard/DashboardFilters';
+import LeakTrendsChart from '@/components/dashboard/LeakTrendsChart';
 import { format, parseISO } from 'date-fns';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -246,6 +247,10 @@ export default function DashboardPage() {
         sourceTypes={uniqueSourceTypes}
       />
 
+      {!isLoading && leaks.length > 0 && (
+        <LeakTrendsChart leaks={leaks} daysToShow={14} />
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Detected Leaks</CardTitle>
@@ -329,4 +334,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

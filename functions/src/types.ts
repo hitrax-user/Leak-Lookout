@@ -38,6 +38,7 @@ export interface GithubContent {
   html_url: string;
   git_url: string;
   download_url: string | null;
+  content?: string; // Base64 encoded content, present for files under 1MB
   _links: {
     self: string;
     git: string;
@@ -149,7 +150,9 @@ export interface LeakedKeyDocument {
 // For creating new leaks before saving (detectionTimestamp will be set by server)
 export type PartialLeakedKey = Omit<LeakedKeyDocument, 'id' | 'detectionTimestamp' | 'status' | 
                                  'isLikelyLeak' | 'enhancedContext' | 'isValid' | 
-                                 'accessibleResources' | 'riskLevel' | 'lastScanned' | 'lastValidatedTimestamp'>;
+                                 'accessibleResources' | 'riskLevel' | 'lastScanned' | 'lastValidatedTimestamp'> & {
+  lineNumber?: number; // Номер строки в файле, где обнаружена утечка
+};
 
 
 // Scan Configuration/Status Type for Firestore
@@ -163,5 +166,5 @@ export interface ScanConfig {
 export interface Scan {
   id: string;
   repoName: string;
-  provider: 'github';
+  provider: 'github' | 'gitlab';
 }

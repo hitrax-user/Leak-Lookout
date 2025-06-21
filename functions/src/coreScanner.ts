@@ -4,7 +4,8 @@
 import { logger } from 'firebase-functions';
 import { searchRepositories as searchGithubRepositories } from './githubClient';
 import { searchProjects as searchGitlabProjects } from './gitlabClient';
-import { processGithubRepo, processGitlabProject } from './scanner';
+import { processGithubRepo, processGitlabProject } from './enhancedScanner';
+import { processBatch } from './batchProcessor';
 
 const GITHUB_LANGUAGES_QUERY = 'language:javascript language:python language:go';
 const KEYWORDS_QUERY_PART = 'api_key OR secret OR token OR "api key" OR "access_token" OR "access token" OR "client_secret" OR "client secret"';
@@ -22,13 +23,23 @@ export async function executeScanLogic(triggerId: string = 'unknown-trigger'): P
     const githubResult = await searchGithubRepositories(GITHUB_SEARCH_QUERY, 1, REPOS_PER_PROVIDER_PER_RUN);
     logger.info(`Found ${githubResult.total_count} GitHub repositories matching criteria. Processing up to ${REPOS_PER_PROVIDER_PER_RUN}.`, { triggerId });
 
-    for (const repo of githubResult.items) {
-      try {
-        await processGithubRepo(repo);
-      } catch (repoError) {
-        logger.error(`Error processing GitHub repo ${repo.full_name}:`, repoError, { triggerId });
+    // Обрабатываем GitHub репозитории пакетами для оптимизации производительности
+    const githubResults = await processBatch(
+      githubResult.items,
+      processGithubRepo,
+      {
+        batchSize: 5, // Обрабатываем по 5 репозиториев одновременно
+        delayBetweenBatches: 2000, // 2 секунды между пакетами
+        maxRetries: 2
       }
-    }
+    );
+    
+    // Подсчитываем количество обнаруженных утечек
+    const githubLeaksCount = githubResults
+      .filter(r => r.success && r.result)
+      .reduce((total, r) => total + (r.result?.length || 0), 0);
+    
+    logger.info(`Processed ${githubResults.length} GitHub repositories. Found ${githubLeaksCount} potential leaks.`, { triggerId });
   } catch (error) {
     logger.error('Error during GitHub repository search or processing phase:', error, { triggerId });
   }
@@ -46,18 +57,29 @@ export async function executeScanLogic(triggerId: string = 'unknown-trigger'): P
            logger.error(`Error searching GitLab projects for keyword "${keyword}":`, searchError, { triggerId });
         }
     }
-    const uniqueGitlabProjects = Array.from(new Map(gitlabProjectsFound.map(p => [p.id, p])).values()).slice(0, REPOS_PER_PROVIDER_PER_RUN);
+    const uniqueGitlabProjects = Array.from(new Map(gitlabProjectsFound.map(p => [p.id, p])).values())
+      .filter(p => !p.archived)
+      .slice(0, REPOS_PER_PROVIDER_PER_RUN);
     
     logger.info(`Found ${uniqueGitlabProjects.length} unique GitLab projects matching criteria. Processing up to ${REPOS_PER_PROVIDER_PER_RUN}.`, { triggerId });
 
-    for (const project of uniqueGitlabProjects) {
-      if (project.archived) continue;
-      try {
-        await processGitlabProject(project);
-      } catch (projectError) {
-        logger.error(`Error processing GitLab project ${project.path_with_namespace}:`, projectError, { triggerId });
+    // Обрабатываем GitLab проекты пакетами для оптимизации производительности
+    const gitlabResults = await processBatch(
+      uniqueGitlabProjects,
+      processGitlabProject,
+      {
+        batchSize: 5, // Обрабатываем по 5 проектов одновременно
+        delayBetweenBatches: 2000, // 2 секунды между пакетами
+        maxRetries: 2
       }
-    }
+    );
+    
+    // Подсчитываем количество обнаруженных утечек
+    const gitlabLeaksCount = gitlabResults
+      .filter(r => r.success && r.result)
+      .reduce((total, r) => total + (r.result?.length || 0), 0);
+    
+    logger.info(`Processed ${gitlabResults.length} GitLab projects. Found ${gitlabLeaksCount} potential leaks.`, { triggerId });
   } catch (error) {
     logger.error('Error during GitLab project search or processing phase:', error, { triggerId });
   }

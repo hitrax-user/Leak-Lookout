@@ -16,7 +16,7 @@
     "@google-cloud/tasks": "^6.1.0",
     "axios": "^1.7.2",
     "firebase-admin": "^12.1.1",
-    "firebase-functions": "^5.0.1"
+    "firebase-functions": "^6.3.2"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

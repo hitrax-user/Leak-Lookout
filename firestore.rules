@@ -2,9 +2,26 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Deny all client-side access.
-    // Data should only be accessed through backend Cloud Functions
-    // using the service account credentials.
+    // Allow authenticated users to read leaks and scan configuration.
+    // Writes should be restricted to backend functions (service account).
+    match /leaks/{leakId} {
+      allow read: if request.auth != null;
+      // Replace 'your-project-id@appspot.gserviceaccount.com' with the actual service account if known,
+      // or keep this general for now. For development, "if request.auth != null;" might be used for writes.
+      allow write: if request.auth.token.email_verified && request.auth.token.email.endsWith('@appspot.gserviceaccount.com');
+      // A more secure way for writes, if you can identify the function's service account email.
+      // allow write: if request.auth.token.email == 'your-project-id@appspot.gserviceaccount.com';
+    }
+
+    match /scan_config/status {
+      allow read: if request.auth != null;
+      // Replace 'your-project-id@appspot.gserviceaccount.com' with the actual service account if known.
+      allow write: if request.auth.token.email_verified && request.auth.token.email.endsWith('@appspot.gserviceaccount.com');
+      // allow write: if request.auth.token.email == 'your-project-id@appspot.gserviceaccount.com';
+    }
+
+    // Optionally, if there are other collections that need specific rules, add them here.
+    // For any other unspecified paths, maintain a secure default (deny access).
     match /{document=**} {
       allow read, write: if false;
     }

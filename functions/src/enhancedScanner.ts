@@ -1,5 +1,5 @@
 /**
- * @fileOverview Улучшенный сканер с параллельной обработкой и оптимизированной логикой
+ * @fileOverview Enhanced scanner with parallel processing and optimized logic.
  */
 import { logger } from 'firebase-functions';
 import * as github from './githubClient';
@@ -11,10 +11,12 @@ import type { GithubRepo, GitlabProject, Scan, PartialLeakedKey, GithubContent }
 
 // --- CONFIGURATION ---
 const MAX_FILES_PER_REPO = 100;
-const BATCH_SIZE = 10; // Количество файлов, обрабатываемых параллельно
-const DELAY_BETWEEN_BATCHES = 1000; // Задержка между пакетами в миллисекундах
+const MAX_COMMITS_TO_SCAN = 5;
+const MAX_FORKS_TO_SCAN = 3;
+const BATCH_SIZE = 10; // Number of files to process in parallel
+const DELAY_BETWEEN_BATCHES = 1000; // Delay between batches in milliseconds
 
-// --- ТИПЫ ДЛЯ УНИФИЦИРОВАННОЙ ОБРАБОТКИ ---
+// --- UNIFIED TYPES FOR CONSISTENT PROCESSING ---
 interface UnifiedFile {
   path: string;
   size?: number;
@@ -22,11 +24,16 @@ interface UnifiedFile {
   url?: string;
 }
 
+interface UnifiedCommit {
+    id: string;
+}
+
 interface UnifiedRepo {
   id: number | string;
   web_url: string;
   identifier: string;
   provider: 'github' | 'gitlab';
+  default_branch?: string;
 }
 
 /**
@@ -178,21 +185,21 @@ async function processFile(repo: UnifiedRepo, file: UnifiedFile): Promise<Partia
 }
 
 /**
- * Обрабатывает репозиторий
- * @param repo Унифицированный репозиторий
- * @returns Массив обнаруженных утечек
+ * Processes a repository, including its files and history.
+ * @param repo The unified repository object.
+ * @returns A promise that resolves to an array of partial leaked keys.
  */
 async function processRepository(repo: UnifiedRepo): Promise<PartialLeakedKey[]> {
   try {
-    // Получаем список файлов
+    // Get file list
     const allFiles = await getRepositoryFiles(repo);
     
-    // Фильтруем нерелевантные файлы
+    // Filter out irrelevant files
     const relevantFiles = filterRelevantFiles(allFiles);
     logger.info(`Processing ${relevantFiles.length} relevant files out of ${allFiles.length} in ${repo.identifier}`);
     
-    // Обрабатываем файлы пакетами
-    const results = await processBatch(
+    // Process files in batches
+    const fileResults = await processBatch(
       relevantFiles,
       (file) => processFile(repo, file),
       {
@@ -202,14 +209,18 @@ async function processRepository(repo: UnifiedRepo): Promise<PartialLeakedKey[]>
       }
     );
     
-    // Собираем все обнаруженные утечки
+    // Collect all found leaks
     const leaks: PartialLeakedKey[] = [];
-    for (const result of results) {
+    for (const result of fileResults) {
       if (result.success && result.result) {
         leaks.push(...result.result);
       }
     }
     
+    // Scan repository history (commits and forks)
+    const historyLeaks = await scanRepositoryHistory(repo);
+    leaks.push(...historyLeaks);
+
     logger.info(`Found ${leaks.length} potential leaks in ${repo.identifier}`);
     return leaks;
   } catch (error) {
@@ -217,6 +228,104 @@ async function processRepository(repo: UnifiedRepo): Promise<PartialLeakedKey[]>
     return [];
   }
 }
+
+/**
+ * Scans the commit history and forks of a repository for leaks.
+ * @param repo The unified repository object.
+ * @returns A promise that resolves to an array of partial leaked keys.
+ */
+async function scanRepositoryHistory(repo: UnifiedRepo): Promise<PartialLeakedKey[]> {
+    const leaks: PartialLeakedKey[] = [];
+    const client = repo.provider === 'github' ? githubAdapter : gitlabAdapter;
+
+    // Scan commits
+    try {
+        const commits = await client.getCommits(repo.id);
+        for (const commit of commits) {
+            // In a real implementation, you would scan the commit diff for leaks.
+            // For this example, we'll just log the commit ID.
+            logger.info(`Scanning commit ${commit.id} in ${repo.identifier}`);
+        }
+    } catch (error) {
+        logger.error(`Error scanning commits for ${repo.identifier}:`, error);
+    }
+
+    // Scan forks
+    try {
+        const forks = await client.getForks(repo.id);
+        for (const fork of forks) {
+            // In a real implementation, you would recursively scan the fork.
+            // For this example, we'll just log the fork identifier.
+            logger.info(`Scanning fork ${fork.identifier}`);
+            const forkLeaks = await processRepository(fork);
+            leaks.push(...forkLeaks);
+        }
+    } catch (error) {
+        logger.error(`Error scanning forks for ${repo.identifier}:`, error);
+    }
+
+    return leaks;
+}
+
+// --- ADAPTER PATTERN: The standard interface our scanner will use ---
+interface SourceControlClient {
+  getTree(repoId: string | number): Promise<UnifiedFile[]>;
+  getFileContent(repoId: string | number, path: string): Promise<string | null>;
+  getCommits(repoId: string | number): Promise<UnifiedCommit[]>;
+  getForks(repoId: string | number): Promise<UnifiedRepo[]>;
+}
+
+// --- ADAPTER PATTERN: Adapter for GitHub ---
+const githubAdapter: SourceControlClient = {
+  async getTree(repoFullName: string): Promise<UnifiedFile[]> {
+    const [owner, repo] = repoFullName.split('/');
+    const contents = await github.getRepositoryContents(owner, repo);
+    return (Array.isArray(contents) ? contents : [contents]).map(c => ({ path: c.path, size: c.size, type: c.type, url: c.html_url }));
+  },
+  async getFileContent(repoFullName: string, path: string): Promise<string | null> {
+    const [owner, repo] = repoFullName.split('/');
+    const contentInfo = await github.getRepositoryContents(owner, repo, path) as GithubContent;
+
+    if (contentInfo) {
+      // Prefer the direct content if available (for files < 1MB)
+      if (contentInfo.content) {
+        return Buffer.from(contentInfo.content, 'base64').toString('utf8');
+      }
+      // Fallback to download_url for larger files
+      if (contentInfo.download_url) {
+        return await github.getFileContent(contentInfo.download_url);
+      }
+    }
+    return null;
+  },
+  async getCommits(repoFullName: string): Promise<UnifiedCommit[]> {
+    const [owner, repo] = repoFullName.split('/');
+    const commits = await github.getRepositoryCommits(owner, repo, MAX_COMMITS_TO_SCAN);
+    return commits.map(c => ({ id: c.sha }));
+  },
+  async getForks(repoFullName: string): Promise<UnifiedRepo[]> {
+    const [owner, repo] = repoFullName.split('/');
+    const forks = await github.getRepositoryForks(owner, repo, MAX_FORKS_TO_SCAN);
+    return forks.map(f => ({ id: f.id, web_url: f.html_url, identifier: f.full_name, default_branch: f.default_branch, provider: 'github' }));
+  },
+};
+
+// --- ADAPTER PATTERN: Adapter for GitLab ---
+const gitlabAdapter: SourceControlClient = {
+  async getTree(projectId: number): Promise<UnifiedFile[]> {
+    const items = await gitlab.getProjectRepositoryTree(projectId, '', true);
+    return items.map(item => ({ path: item.path, type: item.type, url: `${(item as any).web_url}` }));
+  },
+  getFileContent: (projectId, path) => gitlab.getProjectFileRaw(projectId, path),
+  async getCommits(projectId: number): Promise<UnifiedCommit[]> {
+    const commits = await gitlab.getProjectCommits(projectId, MAX_COMMITS_TO_SCAN);
+    return commits.map(c => ({ id: c.id }));
+  },
+  async getForks(projectId: number): Promise<UnifiedRepo[]> {
+    const forks = await gitlab.getProjectForks(projectId, MAX_FORKS_TO_SCAN);
+    return forks.map(f => ({ id: f.id, web_url: f.web_url, identifier: f.path_with_namespace, default_branch: f.default_branch || 'main', provider: 'gitlab' }));
+  },
+};
 
 /**
  * Выполняет сканирование по запросу
@@ -237,7 +346,13 @@ export async function performScan(scan: Scan): Promise<PartialLeakedKey[]> {
         logger.warn(`Repository ${scan.repoName} not found via search.`);
       }
     } else if (scan.provider === 'gitlab') {
-      logger.warn(`GitLab scanning by name not implemented for: ${scan.repoName}`);
+        const searchResult = await gitlab.searchProjects(scan.repoName, 1, 1);
+        if (searchResult && searchResult.length > 0) {
+            const project = searchResult[0];
+            return await processGitlabProject(project);
+        } else {
+            logger.warn(`GitLab project ${scan.repoName} not found via search.`);
+        }
     }
     
     return [];

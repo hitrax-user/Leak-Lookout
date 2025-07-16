@@ -30,7 +30,7 @@ Leak Lookout is an intelligent tool designed to help identify and manage potenti
     *   `src/`: Source code for the Cloud Functions.
         *   `index.ts`: Main entry point for Cloud Functions (scheduled scanner, manual trigger).
         *   `coreScanner.ts`: Core logic for performing scans.
-        *   `scanner.ts`: Logic for processing individual repositories/projects and files.
+        *   `enhancedScanner.ts`: Logic for processing individual repositories/projects and files.
         *   `githubClient.ts`: Client for GitHub API.
         *   `gitlabClient.ts`: Client for GitLab API.
         *   `firestoreService.ts`: Service for saving leaks to Firestore.

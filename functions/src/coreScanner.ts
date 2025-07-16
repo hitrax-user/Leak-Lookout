@@ -23,18 +23,18 @@ export async function executeScanLogic(triggerId: string = 'unknown-trigger'): P
     const githubResult = await searchGithubRepositories(GITHUB_SEARCH_QUERY, 1, REPOS_PER_PROVIDER_PER_RUN);
     logger.info(`Found ${githubResult.total_count} GitHub repositories matching criteria. Processing up to ${REPOS_PER_PROVIDER_PER_RUN}.`, { triggerId });
 
-    // Обрабатываем GitHub репозитории пакетами для оптимизации производительности
+    // Process GitHub repositories in batches for performance optimization
     const githubResults = await processBatch(
       githubResult.items,
       processGithubRepo,
       {
-        batchSize: 5, // Обрабатываем по 5 репозиториев одновременно
-        delayBetweenBatches: 2000, // 2 секунды между пакетами
+        batchSize: 5, // Process 5 repositories concurrently
+        delayBetweenBatches: 2000, // 2 seconds between batches
         maxRetries: 2
       }
     );
     
-    // Подсчитываем количество обнаруженных утечек
+    // Count the number of detected leaks
     const githubLeaksCount = githubResults
       .filter(r => r.success && r.result)
       .reduce((total, r) => total + (r.result?.length || 0), 0);
@@ -63,18 +63,18 @@ export async function executeScanLogic(triggerId: string = 'unknown-trigger'): P
     
     logger.info(`Found ${uniqueGitlabProjects.length} unique GitLab projects matching criteria. Processing up to ${REPOS_PER_PROVIDER_PER_RUN}.`, { triggerId });
 
-    // Обрабатываем GitLab проекты пакетами для оптимизации производительности
+    // Process GitLab projects in batches for performance optimization
     const gitlabResults = await processBatch(
       uniqueGitlabProjects,
       processGitlabProject,
       {
-        batchSize: 5, // Обрабатываем по 5 проектов одновременно
-        delayBetweenBatches: 2000, // 2 секунды между пакетами
+        batchSize: 5, // Process 5 projects concurrently
+        delayBetweenBatches: 2000, // 2 seconds between batches
         maxRetries: 2
       }
     );
     
-    // Подсчитываем количество обнаруженных утечек
+    // Count the number of detected leaks
     const gitlabLeaksCount = gitlabResults
       .filter(r => r.success && r.result)
       .reduce((total, r) => total + (r.result?.length || 0), 0);
